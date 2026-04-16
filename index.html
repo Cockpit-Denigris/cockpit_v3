@@ -8360,6 +8360,81 @@ function appInit(){
   const hint=document.getElementById('home-migrate-hint');
   const hasAny=DB.mb.length||DB.mc.length||Object.keys(EST_DATA.mb.snapshots||{}).length;
   if(hint && !hasAny){ hint.style.display='block'; }
+
+  // ═══ CARREGAR DADOS DO GOOGLE SHEETS AO ABRIR ═════════════════
+  if(SHEETS_CONFIG && SHEETS_CONFIG.enabled){
+    _sincronizarTudoDoSheets();
+  }
+  // ══════════════════════════════════════════════════════════════
+}
+
+async function _sincronizarTudoDoSheets(){
+  try {
+    mostrarToastSync('🔄 Sincronizando dados do Google Sheets...', 'info');
+
+    // ── Vendas MB ──────────────────────────────────────────────
+    const vendasMB = await lerDoSheets('vendas', 'mb');
+    if(vendasMB && vendasMB.length > 0){
+      DB.mb = vendasMB;
+      syncOsTypes(DB.mb);
+      syncOSFromFile(DB.mb);
+      syncSegmentos(DB.mb);
+      [...new Set(DB.mb.map(r=>+r.Ano))].forEach(a=>{ if(!ANOS_LIST.includes(a)) ANOS_LIST.push(a); });
+      ANOS_LIST.sort((a,b)=>a-b);
+      initAnoChips('mb');
+      renderStatusStrip('mb');
+      renderAll('mb');
+      console.log(`✅ Vendas MB carregadas do Sheets: ${DB.mb.length} registros`);
+    }
+
+    // ── Vendas MC ──────────────────────────────────────────────
+    const vendasMC = await lerDoSheets('vendas', 'mc');
+    if(vendasMC && vendasMC.length > 0){
+      DB.mc = vendasMC;
+      syncOsTypes(DB.mc);
+      syncOSFromFile(DB.mc);
+      syncSegmentos(DB.mc);
+      [...new Set(DB.mc.map(r=>+r.Ano))].forEach(a=>{ if(!ANOS_LIST.includes(a)) ANOS_LIST.push(a); });
+      ANOS_LIST.sort((a,b)=>a-b);
+      initAnoChips('mc');
+      renderStatusStrip('mc');
+      renderAll('mc');
+      console.log(`✅ Vendas MC carregadas do Sheets: ${DB.mc.length} registros`);
+    }
+
+    // ── Estoque MB e MC ────────────────────────────────────────
+    await sincronizarEstoqueComSheets('mb');
+    if(Object.keys(EST_DATA.mb.snapshots||{}).length){ initEstFilters('mb'); renderEstoque('mb'); }
+    await sincronizarEstoqueComSheets('mc');
+    if(Object.keys(EST_DATA.mc.snapshots||{}).length){ initEstFilters('mc'); renderEstoque('mc'); }
+
+    // ── Despesas MB e MC ───────────────────────────────────────
+    for(const env of ['mb','mc']){
+      const desp = await lerDoSheets('despesas', env);
+      if(desp && desp.length > 0){
+        desp.forEach(row => {
+          const filial = row._filial;
+          const amKey  = row._periodo;
+          if(!filial || !amKey) return;
+          if(!DESP_DATA[env][filial]) DESP_DATA[env][filial] = {};
+          if(!DESP_DATA[env][filial][amKey]) DESP_DATA[env][filial][amKey] = { contas:[], filial, ano: row._ano, mes: +row._mes };
+          DESP_DATA[env][filial][amKey].contas.push({
+            codigo: row.codigo, nome: row.nome,
+            debito: row.debito||0, credito: row.credito||0,
+            saldoAnterior: row.saldoAnterior||0, saldoAtual: row.saldoAtual||0
+          });
+        });
+        renderDesp(env);
+        console.log(`✅ Despesas ${env.toUpperCase()} carregadas do Sheets: ${desp.length} linhas`);
+      }
+    }
+
+    mostrarToastSync('✅ Dados sincronizados com Google Sheets!', 'success');
+
+  } catch(err){
+    console.warn('⚠️ Erro ao sincronizar do Sheets:', err);
+    mostrarToastSync('⚠️ Não foi possível sincronizar com Sheets', 'warning');
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
