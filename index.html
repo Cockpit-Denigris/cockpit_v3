@@ -4807,9 +4807,10 @@ function toggleOs(el,t){
 function syncOsTypes(rows){
   let changed=false;
   rows.forEach(r=>{
-    if(r.Tipo_OS && r.Tipo_OS!=='—' && !TIPOS_OS_LIST.includes(r.Tipo_OS)){
-      TIPOS_OS_LIST.push(r.Tipo_OS);
-      F.mb.osFilter.add(r.Tipo_OS);
+    const t = r.Tipo_OS;
+    if(t && typeof t === 'string' && t !== '—' && t.trim() !== '' && !TIPOS_OS_LIST.includes(t)){
+      TIPOS_OS_LIST.push(t);
+      F.mb.osFilter.add(t);
       changed=true;
     }
   });
@@ -6569,7 +6570,7 @@ function parseDMSRows(rawRows, env){
     const lucroPct  = getNum(row, COL_MAP.lucroPct);
     const segmento  = getStr(row, COL_MAP.segmento) || getStr(row, COL_MAP.subGrupo) || 'Outros';
     const vendedor  = getStr(row, COL_MAP.vendedor) || '—';
-    const tipoOS    = getStr(row, COL_MAP.tipoOS) || '—';
+    const tipoOS    = String(getStr(row, COL_MAP.tipoOS) || '').trim() || '—';
     const nrOS      = getStr(row, COL_MAP.nrOS);
     const qtde      = getNum(row, COL_MAP.qtde);
     const codProd   = normCod(getStr(row, COL_MAP.codProd));
