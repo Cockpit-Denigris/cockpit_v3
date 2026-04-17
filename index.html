@@ -2690,23 +2690,31 @@ function clrExecutar(){
       }
     }
     
-    // Limpar cada tipo do Sheets
+    // Limpar cada tipo do Sheets e reenviar o que sobrou
     for (const tipo of tiposSheets) {
       try {
-        // Se tem filtro de período, passar período
-        let periodo = null;
-        if (f.mes > 0 && f.ano > 0) {
-          periodo = `${f.ano}_${String(f.mes).padStart(2, '0')}`;
-        }
-        
-        await limparDoSheets(tipo, env, periodo);
+        // 1. Apagar tudo do Sheets para esse tipo/env
+        await limparDoSheets(tipo, env);
         console.log(`✅ ${tipo} limpo do Sheets`);
+
+        // 2. Reenviar o que sobrou no DB (espelho fiel do localStorage)
+        if (tipo === 'vendas' && DB[env].length > 0) {
+          await enviarParaSheets('vendas', env, DB[env], 'append');
+          console.log(`✅ Vendas ${env.toUpperCase()} reenviadas ao Sheets: ${DB[env].length} registros`);
+        }
+        if (tipo === 'estoque') {
+          const allItems = Object.values(EST_DATA[env]?.snapshots||{}).flat();
+          if (allItems.length > 0) {
+            await enviarParaSheets('estoque', env, allItems, 'append');
+            console.log(`✅ Estoque ${env.toUpperCase()} reenviado ao Sheets: ${allItems.length} itens`);
+          }
+        }
       } catch (error) {
-        console.warn(`⚠️ Erro ao limpar ${tipo} do Sheets:`, error);
+        console.warn(`⚠️ Erro ao limpar/reenviar ${tipo} do Sheets:`, error);
       }
     }
     
-    mostrarToastSync('✅ Dados limpos (navegador + Sheets)', 'success');
+    mostrarToastSync('✅ Dados limpos e Sheets sincronizado!', 'success');
   }
   // ════════════════════════════════════════════════════════════════
   
