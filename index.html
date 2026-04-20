@@ -2161,8 +2161,8 @@ async function sincronizarComSheets(tipo, ambiente) {
     const dadosSheets = await lerDoSheets(tipo, ambiente);
     
     if (dadosSheets && dadosSheets.length > 0) {
-      const chave = `${tipo}_${ambiente}`;
-      localStorage.setItem(chave, JSON.stringify(dadosSheets));
+      // Não salvar direto no localStorage (pode estourar cota com volumes grandes)
+      // Retornar os dados para que o chamador use saveState() com fallback IDB
       return dadosSheets;
     } else {
       const chave = `${tipo}_${ambiente}`;
@@ -8428,6 +8428,11 @@ async function _sincronizarTudoDoSheets(){
       renderStatusStrip('mc');
       renderAll('mc');
       console.log(`✅ Vendas MC carregadas do Sheets: ${DB.mc.length} registros`);
+    }
+
+    // Salvar no IDB (suporta volumes grandes, sem limite de cota)
+    if(vendasMB?.length || vendasMC?.length){
+      saveState().catch(e => console.warn('⚠️ saveState após sync:', e));
     }
 
     // ── Estoque MB e MC ────────────────────────────────────────
