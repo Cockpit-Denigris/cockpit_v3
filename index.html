@@ -2289,25 +2289,22 @@ function repairOSFilial(env, filialCorreta){
 
 function syncOSFromFile(rows){
   rows.forEach(r=>{
-    if(!r.Tipo_OS || r._fonte!=='os') return;
+    if(!r.Tipo_OS || typeof r.Tipo_OS !== 'string' || r.Tipo_OS.trim()==='' || r._fonte!=='os') return;
     const cod = r.Tipo_OS;
-    // Registrar código
     if(!TIPOS_OS_LIST.includes(cod)) TIPOS_OS_LIST.push(cod);
-    // Registrar descrição (limpar código do prefixo se vier junto)
     if(r.OS_Desc && !OS_DESC[cod]){
-      // Descrição vem como "C1N - SERV EXECUT VEIC MB NAC"
-      // Extrair só a parte legível após o " - "
       const parts = r.OS_Desc.split(' - ');
       const desc = parts.length>1
         ? parts.slice(1).join(' - ').trim()
         : r.OS_Desc.trim();
-      // Capitalizar: primeira letra maiúscula, resto minúsculo
       OS_DESC[cod] = desc.charAt(0).toUpperCase() + desc.slice(1).toLowerCase();
     }
-    // Garantir que osFilter inclui o tipo
     if(F.mb) F.mb.osFilter.add(cod);
   });
-  TIPOS_OS_LIST.sort();
+  // Filtrar e ordenar apenas strings válidas
+  const validos = TIPOS_OS_LIST.filter(t => t && typeof t === 'string' && t.trim() !== '');
+  TIPOS_OS_LIST.length = 0;
+  validos.sort().forEach(t => TIPOS_OS_LIST.push(t));
 }
 // SEGMENTOS: lista dinâmica — começa com valores padrão, atualizada ao carregar dados reais
 let SEGMENTOS=[
@@ -4787,6 +4784,7 @@ function initOsChecks(){
   const wrap=document.getElementById('os-checks-mb'); if(!wrap)return;
   let h='';
   TIPOS_OS_LIST.forEach(t=>{
+    if(!t || typeof t !== 'string' || t.trim()==='') return;
     F.mb.osFilter.add(t);
     const sid=t.replace(/[^a-z0-9]/gi,'_');
     h+=`<div class="seg-check" onclick="toggleOs(this,'${t.replace(/'/g,"\\'")}')">
@@ -4798,6 +4796,7 @@ function initOsChecks(){
 }
 function osAll(on){
   TIPOS_OS_LIST.forEach(t=>{
+    if(!t || typeof t !== 'string') return;
     const sid=t.replace(/[^a-z0-9]/gi,'_');
     const cb=document.getElementById('oscb-'+sid);
     if(cb){on?cb.classList.add('on'):cb.classList.remove('on');}
