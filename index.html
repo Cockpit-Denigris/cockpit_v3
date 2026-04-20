@@ -8336,8 +8336,11 @@ function appInit(){
   if(hint && !hasAny){ hint.style.display='block'; }
 
   // ═══ DADOS: carrega do IndexedDB/localStorage (principal) ══════
-  // Sheets é apenas backup — leitura só via botão 🔄 Sync manual
-  // Isso evita erro de CORS no GET do Apps Script
+  // Se não tem dados locais → buscar do Sheets automaticamente
+  if(!hasAny && SHEETS_CONFIG && SHEETS_CONFIG.enabled){
+    console.log('📡 Sem dados locais — buscando do Google Sheets...');
+    _sincronizarTudoDoSheets();
+  }
   // ══════════════════════════════════════════════════════════════
 }
 
@@ -10486,7 +10489,8 @@ let GS_CONFIG = {
 function gsUpdateUI(){
   const hasAny = Object.values(GS_CONFIG).some(v=>v.trim());
   const btn = document.getElementById('btn-gs-refresh');
-  if(btn) btn.style.display = hasAny ? '' : 'none';
+  // Mostrar botão se GS_CONFIG configurado OU se SHEETS_CONFIG habilitado
+  if(btn) btn.style.display = (hasAny || (SHEETS_CONFIG && SHEETS_CONFIG.enabled)) ? '' : 'none';
   // Badge indicador de conexão no botão de config
   const cfgBtn = document.getElementById('btn-gs-config');
   if(cfgBtn){
