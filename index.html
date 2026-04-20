@@ -3473,7 +3473,7 @@ function switchEnv(env){
     if(accent) accent.style.color='var(--mc)';
   }
   // swap action buttons visibility for MB-specific ones
-  const mbActions=['btn-status','btn-metas','btn-upload-mb','btn-adm-mb','btn-export','btn-import','btn-gs-config','btn-gs-refresh','btn-html-snap','btn-status','save-indicator','usr-chip-mb'];
+  const mbActions=['btn-status','btn-metas','btn-upload-mb','btn-adm-mb','btn-export','btn-import','btn-gs-config','btn-html-snap','btn-status','save-indicator','usr-chip-mb'];
   // show/hide MC upload button (it lives in navbar-r for MC)
   const mcUpBtn=document.getElementById('btn-upload-mc');
   if(mcUpBtn) mcUpBtn.style.display = env==='mc' ? '' : 'none';
@@ -6326,80 +6326,26 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 // Usa window.onload para garantir que Chart.js e XLSX já carregaram (CDN)
 window.addEventListener('load',()=>{
-  // ═══ SINCRONIZAR COM GOOGLE SHEETS PRIMEIRO ═════════════════════
-  if (SHEETS_CONFIG && SHEETS_CONFIG.enabled) {
-    console.log('🔄 Sincronizando com Google Sheets...');
-    Promise.all([
-      sincronizarComSheets('vendas', 'mb'),
-      sincronizarComSheets('vendas', 'mc'),
-      sincronizarEstoqueComSheets('mb'),
-      sincronizarEstoqueComSheets('mc')
-    ]).then(() => {
-      console.log('✅ Sincronização concluída');
-      
-      // Carregar VENDAS do localStorage
-      const mbData = localStorage.getItem('vendas_mb');
-      const mcData = localStorage.getItem('vendas_mc');
-      
-      if (mbData) {
-        DB.mb = JSON.parse(mbData);
-        console.log(`📊 Vendas MB: ${DB.mb.length} registros`);
-      }
-      if (mcData) {
-        DB.mc = JSON.parse(mcData);
-        console.log(`📊 Vendas MC: ${DB.mc.length} registros`);
-      }
-      
-      // ESTOQUE já foi carregado em EST_DATA pela função sincronizarEstoqueComSheets
-      const estMbCount = Object.values(EST_DATA.mb?.snapshots || {}).reduce((sum, arr) => sum + arr.length, 0);
-      const estMcCount = Object.values(EST_DATA.mc?.snapshots || {}).reduce((sum, arr) => sum + arr.length, 0);
-      if (estMbCount > 0) console.log(`📦 Estoque MB: ${estMbCount} itens`);
-      if (estMcCount > 0) console.log(`📦 Estoque MC: ${estMcCount} itens`);
-      
-      // Renderizar VENDAS
+  // ═══ CARREGAR DADOS DO IDB/localStorage (principal) ═════════════
+  // Sheets é apenas backup — leitura via botão 🔄 Sync manual
+  const _snapLoaded = loadSnapshotData();
+  (_snapLoaded ? Promise.resolve(true) : loadState()).then(loaded=>{
+    if(loaded){
       ['mb','mc'].forEach(env=>{
-        if (DB[env] && DB[env].length > 0) {
-          initAnoChips(env);
-          renderStatusStrip(env);
-          setTimeout(()=>renderAll(env), 80);
-        }
+        initAnoChips(env);
+        renderStatusStrip(env);
+        setTimeout(()=>renderAll(env), 80);
       });
-      
-      // Renderizar ESTOQUE
+      // Estoque
       ['mb','mc'].forEach(env=>{
-        if (Object.keys(EST_DATA[env]?.snapshots||{}).length) {
+        if(Object.keys(EST_DATA[env]?.snapshots||{}).length){
           initEstFilters(env);
           renderEstoque(env);
         }
       });
-    }).catch(err => {
-      console.warn('⚠️ Erro na sincronização, carregando apenas localStorage:', err);
-      // Se falhar, carregar normalmente do localStorage
-      const _snapLoaded = loadSnapshotData();
-      (_snapLoaded ? Promise.resolve(true) : loadState()).then(loaded=>{
-        if(loaded){
-          ['mb','mc'].forEach(env=>{
-            initAnoChips(env);
-            renderStatusStrip(env);
-            setTimeout(()=>renderAll(env), 80);
-          });
-        }
-      });
-    });
-  } else {
-    // Se Sheets desabilitado, carregar normalmente
-    const _snapLoaded = loadSnapshotData();
-    (_snapLoaded ? Promise.resolve(true) : loadState()).then(loaded=>{
-      if(loaded){
-        ['mb','mc'].forEach(env=>{
-          initAnoChips(env);
-          renderStatusStrip(env);
-          setTimeout(()=>renderAll(env), 80);
-        });
-      }
-    });
-  }
-  // ═══════════════════════════════════════════════════════════════
+    }
+  });
+  // ══════════════════════════════════════════════════════════════
 });
 function getUpFilial(){
   const r=document.querySelector('input[name="upFilial"]:checked');
