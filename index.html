@@ -2060,41 +2060,62 @@ const SHEETS_CONFIG = {
 // ── Variável global para rastrear nome do arquivo atual ────────
 window.currentFileName = null;
 
-// ── Função: Enviar dados para Google Sheets ────────────────────
+// ── Função: Enviar dados para Google Sheets (em lotes) ─────────
+const SHEETS_CHUNK_SIZE = 500; // registros por lote
+
 async function enviarParaSheets(tipo, ambiente, dados, acao = 'append', periodo = null) {
   if (!SHEETS_CONFIG.enabled) {
     return { sucesso: false, motivo: 'disabled' };
   }
 
   try {
-    console.log(`📤 Enviando para Sheets: ${tipo}_${ambiente} (${dados.length} registros, acao: ${acao})`);
-    
-    const payload = {
-      token: SHEETS_CONFIG.token,
-      tipo: tipo,
-      ambiente: ambiente,
-      acao: acao,
-      periodo: periodo,
-      dados: dados,
-      arquivo: window.currentFileName || 'Sem nome',
-      usuario: window.currentUser?.nome || 'Sistema'
-    };
-    
-    const response = await fetch(SHEETS_CONFIG.apiUrl, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      mode: 'no-cors',
-      redirect: 'follow'
-    });
-    
-    console.log(`✅ Dados enviados para Sheets (${dados.length} registros)`);
-    
-    return { 
-      sucesso: true, 
+    const total = dados.length;
+    const chunks = [];
+    for (let i = 0; i < total; i += SHEETS_CHUNK_SIZE) {
+      chunks.push(dados.slice(i, i + SHEETS_CHUNK_SIZE));
+    }
+
+    console.log(`📤 Enviando para Sheets: ${tipo}_${ambiente} (${total} registros em ${chunks.length} lote(s), acao: ${acao})`);
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      // Primeiro lote usa a ação original (replace/append); lotes seguintes sempre append
+      const acaoLote = i === 0 ? acao : 'append';
+
+      const payload = {
+        token: SHEETS_CONFIG.token,
+        tipo: tipo,
+        ambiente: ambiente,
+        acao: acaoLote,
+        periodo: periodo,
+        dados: chunk,
+        arquivo: window.currentFileName || 'Sem nome',
+        usuario: window.currentUser?.nome || 'Sistema'
+      };
+
+      await fetch(SHEETS_CONFIG.apiUrl, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        mode: 'no-cors',
+        redirect: 'follow'
+      });
+
+      console.log(`✅ Lote ${i + 1}/${chunks.length} enviado (${chunk.length} registros)`);
+
+      // Pausa entre lotes para não sobrecarregar o Apps Script
+      if (i < chunks.length - 1) {
+        await new Promise(res => setTimeout(res, 300));
+      }
+    }
+
+    console.log(`✅ Dados enviados para Sheets (${total} registros em ${chunks.length} lote(s))`);
+
+    return {
+      sucesso: true,
       mensagem: 'Dados enviados com sucesso',
-      linhasAfetadas: dados.length 
+      linhasAfetadas: total
     };
-    
+
   } catch (error) {
     console.error('❌ Erro ao enviar para Sheets:', error);
     return { sucesso: false, erro: error.message };
