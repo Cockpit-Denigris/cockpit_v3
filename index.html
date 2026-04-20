@@ -7587,6 +7587,24 @@ function pFile(file){
           renderStatusStrip(upEnv);
           saveState();
           renderAll(upEnv);
+
+          // ═══ ENVIO METAS PARA GOOGLE SHEETS ═══════════════════════
+          if(SHEETS_CONFIG && SHEETS_CONFIG.enabled){
+            const metasRows = Object.entries(METAS)
+              .filter(([k,v]) => +v > 0)
+              .map(([k,v]) => {
+                const [fil,ind,canal,ano,mes] = k.split('|');
+                return { _key:k, filial:fil, indicador:ind, canal, ano:+ano, mes:+mes, valor:+v };
+              });
+            if(metasRows.length > 0){
+              limparDoSheets('metas', upEnv)
+                .then(() => enviarParaSheets('metas', upEnv, metasRows, 'append'))
+                .then(() => mostrarToastSync('✅ Metas sincronizadas com Google Sheets', 'success'))
+                .catch(err => console.warn('⚠️ Erro ao sincronizar metas:', err));
+            }
+          }
+          // ══════════════════════════════════════════════════════════
+
           setTimeout(closeUp, 2000);
           return;
 
@@ -8407,6 +8425,23 @@ async function _sincronizarTudoDoSheets(){
         });
         renderDesp(env);
         console.log(`✅ Despesas ${env.toUpperCase()} carregadas do Sheets: ${desp.length} linhas`);
+      }
+    }
+
+    // ── Metas MB e MC ─────────────────────────────────────────────
+    for(const env of ['mb','mc']){
+      const metas = await lerDoSheets('metas', env);
+      if(metas && metas.length > 0){
+        metas.forEach(row => {
+          if(row._key && row.valor !== undefined){
+            METAS[row._key] = +row.valor;
+          } else if(row.filial && row.indicador){
+            const k = mkKey(row.filial, row.indicador, row.canal, row.ano, row.mes);
+            METAS[k] = +row.valor;
+          }
+        });
+        renderMetaTable();
+        console.log(`✅ Metas ${env.toUpperCase()} carregadas do Sheets: ${metas.length} registros`);
       }
     }
 
