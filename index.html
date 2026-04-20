@@ -840,7 +840,7 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
     <button class="ibtn" onclick="importData()" id="btn-import" title="Importar dados" style="color:var(--acc);border-color:color-mix(in srgb,var(--acc) 30%,transparent)">⬆ Importar</button>
     <div style="width:1px;height:18px;background:var(--brd);flex-shrink:0;margin:0 2px"></div>
     <button class="ibtn" onclick="openGSConfig()" id="btn-gs-config" title="Google Sheets" style="color:#34a853;border-color:#34a85344">🔗 Sheets</button>
-    <button class="ibtn" onclick="gsRefreshAll()" id="btn-gs-refresh" title="Atualizar dados" style="color:#4285f4;border-color:#4285f444;display:none">🔄 Sync</button>
+    <button class="ibtn" onclick="_sincronizarTudoDoSheets()" id="btn-gs-refresh" title="Sincronizar do Google Sheets" style="color:#4285f4;border-color:#4285f444">🔄 Sync</button>
     <div style="width:1px;height:18px;background:var(--brd);flex-shrink:0;margin:0 2px"></div>
     <button class="ibtn" onclick="openDataStatus(CURENV)" id="btn-status">📋 Status</button>
     <button class="ibtn" onclick="openMeta(CURENV)" id="btn-metas">🎯 Metas</button>
@@ -8389,10 +8389,9 @@ function appInit(){
   const hasAny=DB.mb.length||DB.mc.length||Object.keys(EST_DATA.mb.snapshots||{}).length;
   if(hint && !hasAny){ hint.style.display='block'; }
 
-  // ═══ CARREGAR DADOS DO GOOGLE SHEETS AO ABRIR ═════════════════
-  if(SHEETS_CONFIG && SHEETS_CONFIG.enabled){
-    _sincronizarTudoDoSheets();
-  }
+  // ═══ DADOS: carrega do IndexedDB/localStorage (principal) ══════
+  // Sheets é apenas backup — leitura só via botão 🔄 Sync manual
+  // Isso evita erro de CORS no GET do Apps Script
   // ══════════════════════════════════════════════════════════════
 }
 
