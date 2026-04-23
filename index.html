@@ -6102,11 +6102,38 @@ function buildStatusInline(env){
   const anos=[...new Set(db.map(r=>r.Ano))].sort();
   const nMetas=Object.keys(METAS).filter(k=>+METAS[k]>0).length;
   const tags=[];
-  if(fontes.dre>0)    tags.push(`<span style="color:var(--grn)">📈 DRE</span>`);
+
+  // DRE — mostrar período coberto com destaque
+  if(fontes.dre>0){
+    const dreRows=db.filter(r=>r._fonte==='dre');
+    const dreFiliais=[...new Set(dreRows.map(r=>r.Filial))].sort();
+    const dreAnos=[...new Set(dreRows.map(r=>r.Ano))].sort();
+    const dreMesMin=Math.min(...dreRows.map(r=>r.Mês_Num));
+    const dreMesMax=Math.max(...dreRows.map(r=>r.Mês_Num));
+    const MN2=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const periodoStr = dreMesMin===dreMesMax
+      ? MN2[dreMesMin-1]
+      : `${MN2[dreMesMin-1]}→${MN2[dreMesMax-1]}`;
+    tags.push(`<span style="background:var(--grn)18;color:var(--grn);border:1px solid var(--grn)44;border-radius:5px;padding:1px 7px;font-weight:700">✅ DRE Oficial · ${dreFiliais.join(', ')} · ${dreAnos.join('/')} (${periodoStr})</span>`);
+  }
+
   if(fontes.dms>0)    tags.push(`<span style="color:var(--blu)">📋 DMS (${fontes.dms.toLocaleString('pt-BR')} linhas)</span>`);
   if(fontes.os>0)     tags.push(`<span style="color:var(--pur)">🔧 Tipos OS</span>`);
   if(fontes.manual>0) tags.push(`<span style="color:var(--acc)">✍ Manual</span>`);
   if(nMetas>0)        tags.push(`<span style="color:var(--ora)">🎯 ${nMetas} metas</span>`);
+
+  // Aviso se tem DMS em períodos que ainda não têm DRE
+  let avisoProvisorio='';
+  if(fontes.dre>0 && fontes.dms>0){
+    const dreKeys=new Set(db.filter(r=>r._fonte==='dre').map(r=>`${r.Filial}|${r.Ano}|${r.Mês_Num}`));
+    const dmsSemDRE=db.filter(r=>r._fonte==='dms'&&!dreKeys.has(`${r.Filial}|${r.Ano}|${r.Mês_Num}`));
+    if(dmsSemDRE.length>0){
+      const mesesProv=[...new Set(dmsSemDRE.map(r=>r.Mês_Num))].sort((a,b)=>a-b);
+      const MN3=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+      avisoProvisorio=`<span style="color:var(--acc);font-size:10px">⚠ DMS provisório: ${mesesProv.map(m=>MN3[m-1]).join(', ')} (aguardando DRE)</span>`;
+    }
+  }
+
   return `
     <span style="color:var(--txt3);font-weight:600;font-size:10px;letter-spacing:.04em">DADOS:</span>
     <span>${filiais.map(f=>`<strong>${f}</strong>`).join(', ')}</span>
@@ -6114,6 +6141,7 @@ function buildStatusInline(env){
     <span style="color:var(--txt3)">Anos: <strong>${anos.join(', ')}</strong></span>
     <span style="color:var(--brd2)">|</span>
     ${tags.join('<span style="color:var(--brd2);margin:0 2px">·</span>')}
+    ${avisoProvisorio?'<span style="color:var(--brd2)">|</span>'+avisoProvisorio:''}
     <span style="color:var(--brd2)">|</span>
     <a onclick="openDataStatus('${env}')" style="color:var(--acc);cursor:pointer;font-size:10px;text-decoration:underline">ver detalhes</a>`;
 }
@@ -6318,76 +6346,83 @@ function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
   setTimeout(closeUp, 2500);
 }
 
-function resolveDREConflict(escolha, filiais, anos, meses, env){
-  const {parsed} = window._pendingDRE || {};
-  window._pendingDRE = null;
-  document.getElementById('up-preview').innerHTML='';
-  if(!parsed) return;
-
-  const filSet = new Set(filiais);
-
-  if(escolha === 'dre'){
-    // Remover linhas DMS dos meses fechados pelo DRE — manter DMS de meses ainda não no DRE
-    DB[env] = DB[env].filter(r=>{
-      if(r._fonte!=='dms') return true;
-      if(!filSet.has(r.Filial)) return true;
-      // Remover só meses que o DRE cobre
-      return !(anos.includes(r.Ano) && meses.includes(r.Mês_Num));
-    });
-    // Adicionar DRE
-    DB[env] = [...DB[env], ...parsed];
-    document.getElementById('upst').textContent=`✅ DRE importado · substituiu DMS nos ${meses.length} mês(es) fechado(s)`;
-  } else {
-    // Manter DMS — importar DRE apenas para KPIs não-Fat (LB%, RD%, RB, Bon)
-    // Substituir Fat_Real do DRE pelo Fat_Real do DMS (preservar número em tempo real)
-    const dmsPorChave={};
-    DB[env].filter(r=>r._fonte==='dms'&&filSet.has(r.Filial)).forEach(r=>{
-      const k=`${r.Filial}|${r.Ano}|${r.Mês_Num}|${r.Canal}`;
-      if(!dmsPorChave[k]) dmsPorChave[k]=0;
-      dmsPorChave[k]+=r.Fat_Real||0;
-    });
-    // Adicionar registros DRE com Fat_Real do DMS onde disponível
-    const dreAdj = parsed.map(r=>{
-      const k=`${r.Filial}|${r.Ano}|${r.Mês_Num}|${r.Canal}`;
-      const fatDMS = dmsPorChave[k];
-      return fatDMS>0 ? {...r, Fat_Real:fatDMS, _fatSrc:'dms'} : r;
-    });
-    // Remover DRE anterior se existia, adicionar novo
-    DB[env] = DB[env].filter(r=>!(r._fonte==='dre'&&filSet.has(r.Filial)&&anos.includes(r.Ano)));
-    DB[env] = [...DB[env], ...dreAdj];
-    document.getElementById('upst').textContent=`✅ DRE importado · Fat. mantido do DMS (tempo real)`;
+function resolveDREConflict(escolha){
+  const pending = window._pendingDRE;
+  if(!pending || !pending.parsed){
+    console.error('❌ resolveDREConflict: _pendingDRE vazio!');
+    alert('Erro: dados do DRE perdidos. Por favor reimporte o arquivo.');
+    return;
   }
 
-  const st2 = document.getElementById('upst');
-  if(st2){ st2.style.color='var(--grn)'; }
+  const {parsed, filaisNovas, dreAnos, dreMeses, env} = pending;
+  window._pendingDRE = null;
 
-  // Mostrar feedback imediato — operações pesadas rodam assíncronas
+  // Feedback imediato
   const pr2 = document.getElementById('up-preview');
-  if(pr2) pr2.innerHTML=`<div style="margin-top:10px;padding:10px 14px;background:var(--card2);border-radius:7px;font-size:11px;color:var(--txt2)">
-    ⏳ Processando dados e atualizando dashboard…</div>`;
+  const st2 = document.getElementById('upst');
+  if(pr2) pr2.innerHTML=`<div style="margin-top:10px;padding:12px 14px;background:var(--card2);border-radius:7px;border-left:3px solid var(--mb);font-size:11px;color:var(--txt2)">
+    ⏳ Aplicando ${escolha==='dre'?'DRE (oficial)':'DMS (tempo real)'}… processando ${parsed.length.toLocaleString('pt-BR')} registros.</div>`;
+  if(st2){ st2.textContent='⏳ Processando…'; st2.style.color='var(--acc)'; }
 
-  // Defer pesado para não travar a UI
+  const filSet = new Set([...filaisNovas]);
+
   setTimeout(()=>{
+    console.group(`📥 resolveDREConflict [${env.toUpperCase()}] — ${escolha}`);
+    console.log(`  Filiais: ${[...filaisNovas].join(', ')}`);
+    console.log(`  Anos: ${dreAnos.join(', ')} | Meses: ${dreMeses.join(', ')}`);
+    console.log(`  Registros DRE: ${parsed.length} | DB antes: ${DB[env].length}`);
+
+    if(escolha === 'dre'){
+      const antesDB = DB[env].length;
+      DB[env] = DB[env].filter(r=>{
+        if(r._fonte!=='dms') return true;
+        if(!filSet.has(r.Filial)) return true;
+        return !(dreAnos.includes(r.Ano) && dreMeses.includes(r.Mês_Num));
+      });
+      const removidos = antesDB - DB[env].length;
+      DB[env] = [...DB[env], ...parsed];
+      const msg = `✅ DRE importado · ${removidos} linhas DMS substituídas · ${parsed.length} reg. DRE`;
+      if(st2){ st2.textContent=msg; st2.style.color='var(--grn)'; }
+      console.log(`  ${msg} | DB depois: ${DB[env].length}`);
+    } else {
+      const dmsPorChave={};
+      DB[env].filter(r=>r._fonte==='dms'&&filSet.has(r.Filial)).forEach(r=>{
+        const k=`${r.Filial}|${r.Ano}|${r.Mês_Num}|${r.Canal}`;
+        dmsPorChave[k]=(dmsPorChave[k]||0)+(r.Fat_Real||0);
+      });
+      const dreAdj=parsed.map(r=>{
+        const k=`${r.Filial}|${r.Ano}|${r.Mês_Num}|${r.Canal}`;
+        return dmsPorChave[k]>0 ? {...r, Fat_Real:dmsPorChave[k], _fatSrc:'dms'} : r;
+      });
+      DB[env]=DB[env].filter(r=>!(r._fonte==='dre'&&filSet.has(r.Filial)&&dreAnos.includes(r.Ano)));
+      DB[env]=[...DB[env],...dreAdj];
+      const msg2=`✅ DRE importado · Fat. preservado do DMS`;
+      if(st2){ st2.textContent=msg2; st2.style.color='var(--grn)'; }
+      console.log(`  ${msg2} | DB depois: ${DB[env].length}`);
+    }
+
+    if(pr2) pr2.innerHTML=`<div style="margin-top:10px;padding:10px 14px;background:var(--card2);border-radius:7px;border-left:3px solid var(--grn);font-size:11px;color:var(--txt2)">✅ Concluído! Atualizando dashboard…</div>`;
+
     [...new Set(DB[env].map(r=>+r.Ano))].forEach(a=>{ if(!ANOS_LIST.includes(a)) ANOS_LIST.push(a); });
     ANOS_LIST.sort((a,b)=>a-b);
-    syncOsTypes(DB[env]);
-    syncOSFromFile(DB[env]);
-    syncSegmentos(DB[env]);
+    syncOsTypes(DB[env]); syncOSFromFile(DB[env]); syncSegmentos(DB[env]);
     initAnoChips(env); initFilialChips(env);
     renderStatusStrip(env);
-    renderAll(env);
     saveState();
+    console.groupEnd();
 
-    // ═══ ENVIO AUTOMÁTICO PARA GOOGLE SHEETS ══════════════════════
-    if (SHEETS_CONFIG && SHEETS_CONFIG.enabled && parsed && parsed.length > 0) {
-      enviarParaSheets('vendas', env, parsed, 'append')
-        .then(() => mostrarToastSync('✅ DRE sincronizado com Google Sheets', 'success'))
-        .catch(err => console.warn('⚠️ Erro ao sincronizar DRE com Sheets:', err));
-    }
-    // ══════════════════════════════════════════════════════════════
+    setTimeout(()=>{
+      renderAll(env);
+      if(SHEETS_CONFIG && SHEETS_CONFIG.enabled){
+        limparDoSheets('vendas', env)
+          .then(()=> enviarParaSheets('vendas', env, DB[env], 'append'))
+          .then(() => mostrarToastSync('✅ DRE sincronizado com Sheets', 'success'))
+          .catch(err => console.warn('⚠️ Sheets sync erro:', err));
+      }
+      setTimeout(closeUp, 1000);
+    }, 100);
 
-    setTimeout(closeUp, 1500);
-  }, 60);
+  }, 80);
 }
 
 function openUp(env){
@@ -7812,27 +7847,35 @@ function pFile(file){
           if(temDMS){
             // Pausar upload e mostrar dialog de escolha
             pr.style.display='none';
+            // Guardar parsed ANTES de montar o HTML (garante que _pendingDRE existe quando botão é clicado)
+            window._pendingDRE = {parsed, filaisNovas, dreAnos, dreMeses, env: upEnv};
+
+            const filsStr = [...filaisNovas].join(', ');
+            const MN_SHORT=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+            const mesesStr = dreMeses.map(m=>MN_SHORT[m-1]).join(', ');
+            const anosStr  = dreAnos.join(', ');
+
             document.getElementById('up-preview').innerHTML=`
               <div style="margin-top:12px;background:var(--card2);border:1px solid var(--ora);border-radius:8px;padding:14px 16px">
                 <div style="font-size:12px;font-weight:700;color:var(--ora);margin-bottom:6px">⚠ Conflito DRE × DMS</div>
-                <div style="font-size:11px;color:var(--txt2);margin-bottom:12px;line-height:1.6">
-                  Já existem dados do <strong>DMS transacional</strong> para 
-                  <strong>${[...filaisNovas].join(', ')}</strong> 
-                  no mesmo período.<br>
+                <div style="font-size:11px;color:var(--txt2);margin-bottom:6px;line-height:1.6">
+                  Já existem dados do <strong>DMS transacional</strong> para
+                  <strong>${filsStr}</strong> — <strong>${anosStr}</strong> (${mesesStr}).<br>
                   <span style="color:var(--txt3)">O DRE é o número oficial (fechamento). O DMS é o número em tempo real.</span>
                 </div>
+                <div style="font-size:10px;color:var(--txt3);margin-bottom:10px">
+                  ${parsed.length.toLocaleString('pt-BR')} registros DRE prontos para importar
+                </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
-                  <button class="ibtn prime-mb" style="font-size:11px" onclick="resolveDREConflict('dre', ${JSON.stringify([...filaisNovas])}, ${JSON.stringify(dreAnos)}, ${JSON.stringify(dreMeses)}, '${upEnv}')">
+                  <button class="ibtn prime-mb" style="font-size:12px;padding:8px 16px" onclick="resolveDREConflict('dre')">
                     📈 Usar DRE (oficial) — substitui DMS nos meses fechados
                   </button>
-                  <button class="ibtn" style="font-size:11px" onclick="resolveDREConflict('dms', ${JSON.stringify([...filaisNovas])}, ${JSON.stringify(dreAnos)}, ${JSON.stringify(dreMeses)}, '${upEnv}')">
+                  <button class="ibtn" style="font-size:12px;padding:8px 16px" onclick="resolveDREConflict('dms')">
                     📋 Manter DMS — ignorar Fat. do DRE
                   </button>
                 </div>
               </div>`;
-            // Guardar parsed para uso posterior
-            window._pendingDRE = {parsed, filaisNovas, upEnv};
-            return; // não continuar — aguardar escolha do usuário
+            return; // aguardar escolha do usuário
           }
 
         } else {
@@ -8525,14 +8568,38 @@ function appInit(){
 }
 
 async function _sincronizarTudoDoSheets(){
+  // Mostrar loading screen visível na home enquanto busca do Sheets
+  const homeLoadEl = document.getElementById('home-migrate-hint');
+  const loadScreen = document.createElement('div');
+  loadScreen.id = 'gs-loading-screen';
+  loadScreen.style.cssText = `position:fixed;inset:0;z-index:99998;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px`;
+  loadScreen.innerHTML = `
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px">De <span style="color:var(--mb)">Nigris</span></div>
+    <div id="gs-load-msg" style="font-size:13px;color:var(--txt2);min-width:280px;text-align:center">🔄 Conectando ao Google Sheets…</div>
+    <div style="width:280px;height:4px;background:var(--brd);border-radius:2px;overflow:hidden">
+      <div id="gs-load-bar" style="height:4px;background:var(--mb);border-radius:2px;width:0%;transition:width .5s ease"></div>
+    </div>
+    <div style="font-size:11px;color:var(--txt3)">Carregando dados — pode levar alguns segundos…</div>`;
+  document.body.appendChild(loadScreen);
+
+  const setLoad = (pct, msg) => {
+    const bar = document.getElementById('gs-load-bar');
+    const msgEl = document.getElementById('gs-load-msg');
+    if(bar) bar.style.width = pct + '%';
+    if(msgEl) msgEl.textContent = msg;
+  };
+
   try {
     console.group('🔄 _sincronizarTudoDoSheets — início');
     mostrarToastSync('🔄 Sincronizando dados do Google Sheets...', 'info');
+    setLoad(5, '📡 Buscando Vendas MB…');
 
     // ── Vendas MB ──────────────────────────────────────────────
     console.log('📡 Buscando Vendas MB...');
+    setLoad(15, '📡 Buscando vendas Peças MB… (pode demorar)');
     const vendasMB = await lerDoSheets('vendas', 'mb');
     if(vendasMB && vendasMB.length > 0){
+      setLoad(35, `✅ MB: ${vendasMB.length.toLocaleString('pt-BR')} registros — processando…`);
       DB.mb = vendasMB;
       syncOsTypes(DB.mb);
       syncOSFromFile(DB.mb);
@@ -8546,12 +8613,15 @@ async function _sincronizarTudoDoSheets(){
       console.log(`✅ Vendas MB: ${DB.mb.length} registros | Filiais: ${filsMB.join(', ')}`);
     } else {
       console.warn('⚠️ Vendas MB: sem dados no Sheets');
+      setLoad(35, '⚠️ MB: sem dados no Sheets');
     }
 
     // ── Vendas MC ──────────────────────────────────────────────
     console.log('📡 Buscando Vendas MC...');
+    setLoad(40, '📡 Buscando vendas Pneus MC…');
     const vendasMC = await lerDoSheets('vendas', 'mc');
     if(vendasMC && vendasMC.length > 0){
+      setLoad(58, `✅ MC: ${vendasMC.length.toLocaleString('pt-BR')} registros — processando…`);
       DB.mc = vendasMC;
       syncOsTypes(DB.mc);
       syncOSFromFile(DB.mc);
@@ -8573,12 +8643,14 @@ async function _sincronizarTudoDoSheets(){
     }
 
     // ── Estoque MB e MC ────────────────────────────────────────
+    setLoad(65, '📦 Buscando estoque…');
     await sincronizarEstoqueComSheets('mb');
     if(Object.keys(EST_DATA.mb.snapshots||{}).length){ initEstFilters('mb'); renderEstoque('mb'); }
     await sincronizarEstoqueComSheets('mc');
     if(Object.keys(EST_DATA.mc.snapshots||{}).length){ initEstFilters('mc'); renderEstoque('mc'); }
 
     // ── Despesas MB e MC ───────────────────────────────────────
+    setLoad(75, '💰 Buscando despesas…');
     for(const env of ['mb','mc']){
       const desp = await lerDoSheets('despesas', env);
       if(desp && desp.length > 0){
@@ -8600,6 +8672,7 @@ async function _sincronizarTudoDoSheets(){
     }
 
     // ── Metas MB e MC ─────────────────────────────────────────────
+    setLoad(88, '🎯 Buscando metas…');
     for(const env of ['mb','mc']){
       const metas = await lerDoSheets('metas', env);
       if(metas && metas.length > 0){
@@ -8616,13 +8689,17 @@ async function _sincronizarTudoDoSheets(){
       }
     }
 
+    setLoad(100, '✅ Carregamento concluído!');
     console.log('✅ Sincronização concluída!');
     console.groupEnd();
+    // Remover loading screen com pequeno delay
+    setTimeout(()=>{ const s=document.getElementById('gs-loading-screen'); if(s) s.remove(); }, 800);
     mostrarToastSync('✅ Dados sincronizados com Google Sheets!', 'success');
 
   } catch(err){
     console.error('❌ Erro ao sincronizar do Sheets:', err);
     console.groupEnd();
+    setTimeout(()=>{ const s=document.getElementById('gs-loading-screen'); if(s) s.remove(); }, 1000);
     mostrarToastSync('⚠️ Não foi possível sincronizar com Sheets', 'warning');
   }
 }
