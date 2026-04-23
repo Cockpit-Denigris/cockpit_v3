@@ -5,7 +5,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>De Nigris · Cockpit v2</title>
+<title>De Nigris · Cockpit v3</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js">
 </script>
@@ -860,6 +860,15 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
 <div class="env-page active" id="env-mb-page">
   <!-- FILTER MB -->
   <div class="filterbar" id="fb-mb">
+    <span class="flbl">Núcleos</span>
+    <div class="chips" id="fNucleoMB">
+      <div class="chip on-mb" onclick="fAllNucleo('mb',this)">Todos</div>
+      <div class="chip" onclick="fTogNucleo('mb',this,'Afabio')">Afabio</div>
+      <div class="chip" onclick="fTogNucleo('mb',this,'Edivaldo')">Edivaldo</div>
+      <div class="chip" onclick="fTogNucleo('mb',this,'Carmo')">Carmo</div>
+      <div class="chip" onclick="fTogNucleo('mb',this,'Bertoco')">Bertoco</div>
+    </div>
+    <div class="fsep"></div>
     <span class="flbl">Filial</span>
     <div class="chips" id="fFilMB">
       <div class="chip on-mb" onclick="fAllFilial('mb',this)">Todas</div>
@@ -870,7 +879,6 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
       <div class="chip dsh" onclick="addFilial('mb')">+ Filial</div>
     </div>
     <div class="fsep"></div>
-    <span class="flbl">Ano</span>
     <div class="chips" id="main-anos-mb" style="flex-wrap:nowrap"></div>
     <div class="fsep"></div>
     <span class="flbl">Mês</span>
@@ -1074,6 +1082,9 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
     <div class="tab-page" id="mb-est">
       <!-- FILTERBAR EST (hidden until goTab activates) -->
       <div class="filterbar fb-est" id="fb-est-mb" style="display:none">
+        <span class="flbl">Núcleos</span>
+        <div class="chips" id="chips-est-nucleo-mb"></div>
+        <div class="fsep"></div>
         <span class="flbl">Filial</span>
         <div class="chips" id="chips-est-fil-mb"></div>
         <div class="fsep"></div>
@@ -1230,7 +1241,7 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
             <div class="cc-hd">
               <div>
                 <div class="cc-title">🔀 Cruzamento de Curvas entre Filiais</div>
-                <div class="cc-sub">Itens Curva C ou D em uma filial que são Curva A ou B em outra — oportunidade de redistribuição</div>
+                <div class="cc-sub">Itens Curva D em uma filial que são Curva A ou B em outra — oportunidade de redistribuição</div>
               </div>
               <div style="display:flex;gap:6px;align-items:center">
                 <span class="badge ba" id="est-cruz-badge-mb">—</span>
@@ -1238,7 +1249,7 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
               </div>
             </div>
             <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
-              <span style="font-size:11px;color:var(--txt3)">Filial Excesso (C/D):</span>
+              <span style="font-size:11px;color:var(--txt3)">Filial Excesso (D):</span>
               <div id="est-cruz-fil-mb" class="chips"></div>
               <div class="fsep"></div>
               <span style="font-size:11px;color:var(--txt3)">Filial Demanda (A/B):</span>
@@ -1514,7 +1525,6 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
       <div class="chip dsh" onclick="addFilial('mc')">+ Filial</div>
     </div>
     <div class="fsep"></div>
-    <span class="flbl">Ano</span>
     <div class="chips" id="main-anos-mc" style="flex-wrap:nowrap"></div>
     <div class="fsep"></div>
     <span class="flbl">Mês</span>
@@ -1675,7 +1685,7 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
       <div id="est-pg-cruz-mc" style="display:none">
         <div class="cc"><div class="cc-hd"><div><div class="cc-title">🔀 Cruzamento Curvas</div><div class="cc-sub">Itens em C/D em uma filial que têm demanda A/B em outra</div></div><div style="display:flex;gap:6px;align-items:center"><button class="ibtn" onclick="exportEstCruzCSV('mc')" style="font-size:10px">⬇ CSV</button><span class="badge bmc">CRUZ</span></div></div>
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
-            <span style="font-size:11px;color:var(--txt3)">Filial Excesso (C/D):</span><div id="est-cruz-fil-mc" class="chips"></div>
+            <span style="font-size:11px;color:var(--txt3)">Filial Excesso (D):</span><div id="est-cruz-fil-mc" class="chips"></div>
             <div class="fsep"></div>
             <span style="font-size:11px;color:var(--txt3)">Filial Demanda (A/B):</span><div id="est-cruz-dem-mc" class="chips"></div>
             <div class="fsep"></div>
@@ -3668,14 +3678,6 @@ function fAllFilial(env,el){
   document.querySelectorAll(`#fFil${env.toUpperCase()} .chip:not(.dsh)`).forEach(c=>c.classList.remove('on-mb','on-mc'));
   el.classList.add('on-'+env); F[env].filial=new Set(['all']); renderAll(env);
 }
-function fTogFilial(env,el,val){
-  const wrap=document.getElementById('fFil'+env.toUpperCase());
-  wrap.querySelector('.chip').classList.remove('on-mb','on-mc'); F[env].filial.delete('all');
-  el.classList.toggle('on-'+env);
-  el.classList.contains('on-'+env)?F[env].filial.add(val):F[env].filial.delete(val);
-  if(F[env].filial.size===0){fAllFilial(env,wrap.querySelector('.chip'));return;}
-  renderAll(env);
-}
 function fToggle(env,el,type,val){
   if(type==='mes'){document.querySelector(`#fMes${env.toUpperCase()} .chip`).classList.remove('on-mb','on-mc');F[env].mes.delete('all');}
   el.classList.toggle('on-'+env);
@@ -3704,6 +3706,70 @@ function addFilial(env){
   const wrap=document.getElementById('fFil'+env.toUpperCase()),add=wrap.querySelector('.dsh');
   const c=document.createElement('div'); c.className='chip'; c.textContent=name;
   c.onclick=()=>fTogFilial(env,c,name); wrap.insertBefore(c,add);
+}
+
+// ── Núcleos: selecionar todas as filiais do núcleo ─────────────
+function fAllNucleo(env, el){
+  // Limpar seleção de núcleo e filial → mostrar tudo
+  document.querySelectorAll(`#fNucleo${env.toUpperCase()} .chip`).forEach(c=>c.classList.remove('on-mb','on-mc'));
+  el.classList.add('on-'+env);
+  // Reset filiais para "Todas"
+  const filWrap=document.getElementById('fFil'+env.toUpperCase());
+  if(filWrap){
+    filWrap.querySelectorAll('.chip').forEach(c=>c.classList.remove('on-mb','on-mc'));
+    filWrap.querySelector('.chip').classList.add('on-'+env);
+  }
+  F[env].filial=new Set(['all']);
+  renderAll(env);
+}
+function fTogNucleo(env, el, nomeNucleo){
+  // Desativar "Todos" nos núcleos
+  const nuclWrap=document.getElementById('fNucleo'+env.toUpperCase());
+  if(nuclWrap) nuclWrap.querySelector('.chip').classList.remove('on-mb','on-mc');
+  // Toggle este núcleo
+  el.classList.toggle('on-'+env);
+  // Recalcular filiais ativas a partir dos núcleos selecionados
+  const activNucleos=[];
+  if(nuclWrap){
+    nuclWrap.querySelectorAll('.chip:not(.chip:first-child)').forEach(c=>{
+      if(c.classList.contains('on-mb')||c.classList.contains('on-mc'))
+        activNucleos.push(c.textContent.trim());
+    });
+  }
+  if(!activNucleos.length){
+    // Nenhum núcleo selecionado → volta para "Todos"
+    fAllNucleo(env, nuclWrap.querySelector('.chip'));
+    return;
+  }
+  // Obter filiais dos núcleos selecionados
+  const filsDoNucleo=[];
+  activNucleos.forEach(n=>{
+    const nDef=NUCLEOS.find(x=>x.nome===n);
+    if(nDef) filsDoNucleo.push(...nDef.filiais);
+  });
+  F[env].filial=new Set(filsDoNucleo);
+  // Atualizar chips de filial para refletir seleção
+  const filWrap=document.getElementById('fFil'+env.toUpperCase());
+  if(filWrap){
+    filWrap.querySelectorAll('.chip').forEach(c=>{
+      const name=c.textContent.trim();
+      if(name==='Todas'||name==='+ Filial') c.classList.remove('on-mb','on-mc');
+      else if(filsDoNucleo.includes(name)) c.classList.add('on-'+env);
+      else c.classList.remove('on-mb','on-mc');
+    });
+  }
+  renderAll(env);
+}
+// Ao clicar em filial individual: desativa Núcleos e usa seleção livre
+function fTogFilial(env,el,val){
+  // Limpar seleção de núcleo (não remove visual, só reseta)
+  // A filial individual tem prioridade
+  const wrap=document.getElementById('fFil'+env.toUpperCase());
+  wrap.querySelector('.chip').classList.remove('on-mb','on-mc'); F[env].filial.delete('all');
+  el.classList.toggle('on-'+env);
+  el.classList.contains('on-'+env)?F[env].filial.add(val):F[env].filial.delete(val);
+  if(F[env].filial.size===0){fAllFilial(env,wrap.querySelector('.chip'));return;}
+  renderAll(env);
 }
 
 /* ═══════════════════════════════════════════════
@@ -6173,28 +6239,18 @@ function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
   
   // ═══ SINCRONIZAR COM GOOGLE SHEETS ═════════════════════════════
   if (SHEETS_CONFIG && SHEETS_CONFIG.enabled && parsed.length > 0) {
-    // Determinar período para substituição
-    let periodo = null;
-    if (modo === 'substituir' && parsed.length > 0) {
-      // Pegar ano e mês do primeiro registro para construir período
-      const primeiroReg = parsed[0];
-      const ano = primeiroReg.Ano;
-      const mes = String(primeiroReg.Mês_Num).padStart(2, '0');
-      periodo = `${ano}_${mes}`;
-    }
-    
-    // Enviar para Sheets
-    const acaoSheets = modo === 'substituir' ? 'replace' : 'append';
-    enviarParaSheets('vendas', env, parsed, acaoSheets, periodo)
-      .then(result => {
-        if (result.sucesso) {
+    (async ()=>{
+      try{
+        if(modo === 'substituir'){
+          // Limpar TUDO do Sheets e reenviar DB completo (evita duplicatas)
+          await limparDoSheets('vendas', env);
+          await enviarParaSheets('vendas', env, DB[env], 'append');
+        } else {
+          await enviarParaSheets('vendas', env, parsed, 'append');
         }
-        mostrarToastSync(
-          `✅ Dados salvos no Sheets (${modoLabel})`, 
-          'success'
-        );
-      })
-      .catch(err => console.warn('⚠️ Erro ao sincronizar com Sheets:', err));
+        mostrarToastSync(`✅ Dados salvos no Sheets (${modoLabel})`, 'success');
+      }catch(err){ console.warn('⚠️ Erro ao sincronizar com Sheets:', err); }
+    })();
   }
   // ════════════════════════════════════════════════════════════════
   
@@ -6441,17 +6497,47 @@ function mapCanal(depto){
 // Mapeamento Filial DMS → nome no dashboard
 // Mapeamento fixo das 4 unidades do grupo De Nigris
 const FILIAL_MAP=[
-  {keys:['ITAPEVA'],                        nome:'Itapeva'},
-  {keys:['ALUMINIO','ALUMÍNIO','ALUM','ALUMINÍO','ALUMINI'], nome:'Alumínio'},
-  {keys:['SOROCABA','MATRIZ'],              nome:'Sorocaba'},
-  {keys:['ITU'],                            nome:'Itu'},
+  {keys:['ITAPEVA'],                                              nome:'Itapeva'},
+  {keys:['ALUMINIO','ALUMÍNIO','ALUM','ALUMINÍO','ALUMINI'],      nome:'Alumínio'},
+  {keys:['SOROCABA','MATRIZ'],                                    nome:'Sorocaba'},
+  {keys:['ITU'],                                                  nome:'Itu'},
+  // DN SJC
+  {keys:['SJC','SAO JOSE','SÃO JOSÉ','SJCAMPOS','S.J.'],         nome:'DN SJC'},
+  // Novas filiais (auto-detect)
+  {keys:['ROSEIRA'],                                              nome:'Roseira'},
+  {keys:['SBC','BERNARDO','S.B.C'],                               nome:'SBC'},
+  {keys:['DEMARCHI'],                                             nome:'Demarchi'},
+  {keys:['LIMAO','LIMÃO'],                                        nome:'Limão'},
+  {keys:['GUARULHOS','GRU'],                                      nome:'Guarulhos'},
 ];
 function mapFilial(filialDMS){
   const f=String(filialDMS||'').toUpperCase().trim();
   for(const {keys,nome} of FILIAL_MAP){
     if(keys.some(k=>f.includes(k))) return nome;
   }
+  // Auto-detect: retorna o nome como está (nova filial desconhecida será adicionada dinamicamente)
   return filialDMS||'—';
+}
+
+// ── Núcleos: mapeamento de filiais por diretor ─────────────────
+const NUCLEOS = [
+  { nome:'Afabio',   filiais:['Itapeva','Itu','Sorocaba','Alumínio'] },
+  { nome:'Edivaldo', filiais:['DN SJC','Roseira'] },
+  { nome:'Carmo',    filiais:['SBC','Demarchi'] },
+  { nome:'Bertoco',  filiais:['Limão','Guarulhos'] },
+];
+// Retorna o núcleo de uma filial
+function getNucleo(filial){
+  for(const n of NUCLEOS){
+    if(n.filiais.includes(filial)) return n.nome;
+  }
+  return null;
+}
+// Lista todas as filiais conhecidas (FILIAL_MAP + dados carregados)
+function getAllFiliais(env){
+  const fromData = [...new Set((DB[env]||[]).map(r=>r.Filial).filter(f=>f&&f!=='—'))].sort();
+  const fromMap = FILIAL_MAP.map(f=>f.nome);
+  return [...new Set([...fromMap,...fromData])].filter(Boolean).sort();
 }
 
 // Encontra o nome real da coluna no objeto de linha
@@ -7002,14 +7088,18 @@ function parseDRESheetNovo(sh, env){
   hdr.forEach((v, ci) => {
     if(ci < 2) return;
     let mes=0, ano=0;
-    if(v instanceof Date || (typeof v === 'object' && v)){
+    if(v instanceof Date || (typeof v === 'object' && v && v.getMonth)){
       try { const d = new Date(v); mes=d.getUTCMonth()+1; ano=d.getUTCFullYear(); } catch{}
     }
-    if(!mes){ const r = xlSerialToMesAno(v); if(r){ mes=r.mes; ano=r.ano; } }
-    if(!mes && typeof v === 'string' && v.match(/^\d{4}-\d{2}/)){
-      const p = v.split('-'); ano=+p[0]; mes=+p[1];
+    if(!mes){
+      // Suporte a string ISO: "2024-01-01 00:00:00" ou "2024-01-01"
+      if(typeof v === 'string'){
+        const mISO = v.match(/^(\d{4})-(\d{2})/);
+        if(mISO){ ano=+mISO[1]; mes=+mISO[2]; }
+      }
     }
-    if(mes && ano && ano >= 2020 && ano <= 2030) colMesAno[ci] = {mes, ano};
+    if(!mes){ const r = xlSerialToMesAno(v); if(r){ mes=r.mes; ano=r.ano; } }
+    if(mes && ano && ano >= 2020 && ano <= 2035) colMesAno[ci] = {mes, ano};
   });
   if(!Object.keys(colMesAno).length) return [];
 
@@ -7020,7 +7110,19 @@ function parseDRESheetNovo(sh, env){
   // ── Extrator de valor numérico de uma célula ──────────────────────────
   const numVal = raw => {
     if(typeof raw === 'number') return isFinite(raw) ? raw : 0;
-    const v = parseFloat(String(raw||'').replace(/,/g,'.').replace(/[^0-9.\-]/g,''));
+    const s = String(raw||'').trim();
+    if(!s) return 0;
+    // Lidar com fórmulas simples tipo =A+B (ex: =345772.04+38.39)
+    if(s.startsWith('=')){
+      try{
+        // Extrair expressão numérica simples: só +, -, *, / e números
+        const expr = s.slice(1).replace(/[^0-9+\-*.\/]/g,'');
+        // eslint-disable-next-line no-new-func
+        const result = Function('"use strict";return ('+expr+')')();
+        return isFinite(result) ? result : 0;
+      }catch{ return 0; }
+    }
+    const v = parseFloat(s.replace(/,/g,'.').replace(/[^0-9.\-]/g,''));
     return isNaN(v) ? 0 : v;
   };
 
@@ -7034,23 +7136,22 @@ function parseDRESheetNovo(sh, env){
     const key = `${ano}_${mes}`;
     const c = +ci;
 
-    const fat_tele  = rowVal(1,  c);  // L2
-    const fat_ofic  = rowVal(2,  c)   // L3
-                    + rowVal(3,  c);  // L4  (Funilaria soma em Ofic)
-    const bon       = rowVal(4,  c)   // L5  Bonificações
+    const fat_tele  = rowVal(1,  c);  // L2  Receitas Vendas-Balção/Telepçs
+    const fat_ofic  = rowVal(2,  c)   // L3  Receitas Vendas- Peças Oficina
+                    + rowVal(3,  c);  // L4  Receitas Vendas-Peças Funilaria (soma em ofic)
+    const bon       = rowVal(4,  c)   // L5  Receitas Bonificações
                     + rowVal(5,  c);  // L6  Outras Receitas
     const rb        = rowVal(6,  c);  // L7  Receita Bruta (direto do arquivo)
     const lb_r      = rowVal(15, c);  // L16 Lucro Bruto
     const rd        = rowVal(56, c);  // L57 Resultado Departamental
-    const estq      = rowVal(58, c);  // L59 Estoque Geral (valor)
-    const custo_tot = rowVal(14, c);  // L15 Total de Custos (denominador da fórmula)
-    const prazo_est = rowVal(59, c);  // L60 Dias Estoque Geral (do arquivo)
+    const estq      = rowVal(58, c);  // L59 Estoque Geral (valor)  — row index 58 = linha Excel 59
+    const custo_tot = rowVal(14, c);  // L15 Total de Custos
+    const prazo_est = rowVal(59, c);  // L60 Renovação DRE (dias estoque geral)
     // Dias em Estoque Geral: do arquivo (L60), fallback cálculo (L59/L15)*30
     const dias_estq = prazo_est > 0 ? prazo_est : (custo_tot > 0 ? (estq / custo_tot) * 30 : 0);
-    // Novos campos
     const estq_disp  = rowVal(61, c);  // L62 Estoque Disponível
-    const dias_disp  = rowVal(62, c);  // L63 Dias Estoque Disponível
-    const estq_req   = rowVal(64, c);  // L65 Peças Requisitadas
+    const dias_disp  = rowVal(62, c);  // L63 Renovação Sobre Disponivel
+    const estq_req   = rowVal(64, c);  // L65 PEÇAS REQUISITADAS
 
     // Fat. Líquido = L2+L3+L4 (faturamento departamental, sem descontos/impostos)
     const fat_liq   = fat_tele + fat_ofic;
@@ -8755,6 +8856,61 @@ function initEstFilters(env){
   EST_F[env].tec=new Set(['SIM','NÃO']);
   EST_F[env].grupos=new Set(); // vazio = todos passam
 
+  // Núcleo chips (só no env mb, estoque)
+  const nc=document.getElementById(`chips-est-nucleo-${env}`);
+  if(nc){
+    nc.innerHTML='';
+    // "Todos" chip
+    const allCh=document.createElement('button');
+    allCh.className='chip on-'+env; allCh.textContent='Todos';
+    allCh.onclick=()=>{
+      nc.querySelectorAll('.chip').forEach(c=>c.classList.remove('on-mb','on-mc'));
+      allCh.classList.add('on-'+env);
+      EST_F[env].filiais=new Set(filiais);
+      // Selecionar todas as filiais nos chips
+      const fc2=document.getElementById(`chips-est-fil-${env}`);
+      if(fc2) fc2.querySelectorAll('.chip').forEach(c=>c.classList.add('on-'+env));
+      renderEstoque(env);
+    };
+    nc.appendChild(allCh);
+    NUCLEOS.forEach(nucl=>{
+      // Só mostrar núcleos que têm filiais no estoque
+      const filsNoEst=nucl.filiais.filter(f=>filiais.includes(f));
+      if(!filsNoEst.length) return;
+      const ch=document.createElement('button');
+      ch.className='chip'; ch.textContent=nucl.nome;
+      ch.onclick=()=>{
+        // Toggle este núcleo
+        ch.classList.toggle('on-'+env);
+        // Recalcular filiais ativas dos núcleos ON
+        const ativos=[];
+        nc.querySelectorAll('.chip').forEach(c=>{
+          if(c===allCh) return;
+          if(c.classList.contains('on-mb')||c.classList.contains('on-mc')){
+            const n=NUCLEOS.find(x=>x.nome===c.textContent);
+            if(n) ativos.push(...n.filiais);
+          }
+        });
+        if(!ativos.length){
+          // nenhum ativo → volta para "Todos"
+          allCh.click();
+          return;
+        }
+        allCh.classList.remove('on-mb','on-mc');
+        EST_F[env].filiais=new Set(ativos.filter(f=>filiais.includes(f)));
+        // Atualizar chips de filial
+        const fc2=document.getElementById(`chips-est-fil-${env}`);
+        if(fc2) fc2.querySelectorAll('.chip').forEach(c=>{
+          const nm=c.textContent.trim();
+          if(EST_F[env].filiais.has(nm)) c.classList.add('on-'+env);
+          else c.classList.remove('on-mb','on-mc');
+        });
+        renderEstoque(env);
+      };
+      nc.appendChild(ch);
+    });
+  }
+
   // Filial chips
   const fc=document.getElementById(`chips-est-fil-${env}`);
   if(fc){
@@ -9947,7 +10103,7 @@ function renderEstCruzamento(env){
     var fils = data.fils;
     if(Object.keys(fils).length < 2) return;
 
-    var cdFils = selFil.filter(function(f){ return fils[f] && (fils[f].curva==='C'||fils[f].curva==='D'); });
+    var cdFils = selFil.filter(function(f){ return fils[f] && fils[f].curva==='D'; });
     var abFils = selDem.filter(function(f){ return fils[f] && (fils[f].curva==='A'||fils[f].curva==='B'); });
     if(!cdFils.length || !abFils.length) return;
 
