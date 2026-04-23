@@ -6373,17 +6373,22 @@ function resolveDREConflict(escolha){
     console.log(`  Registros DRE: ${parsed.length} | DB antes: ${DB[env].length}`);
 
     if(escolha === 'dre'){
+      // ESTRATÉGIA CORRETA: DRE convive com DMS
+      // - DRE tem prioridade nos KPIs/Indicadores via applyDREPriority()
+      // - DMS é MANTIDO para Segmento, Vendedor e Clientes (dados granulares)
+      // - Apenas remove DRE anterior (se havia importação prévia) para evitar duplicata DRE×DRE
       const antesDB = DB[env].length;
       DB[env] = DB[env].filter(r=>{
-        if(r._fonte!=='dms') return true;
-        if(!filSet.has(r.Filial)) return true;
-        return !(dreAnos.includes(r.Ano) && dreMeses.includes(r.Mês_Num));
+        // Remove DRE antigo das mesmas filiais/períodos (evita duplicata DRE×DRE)
+        if(r._fonte==='dre' && filSet.has(r.Filial) && dreAnos.includes(r.Ano)) return false;
+        // MANTÉM DMS — ele continua servindo para Segmento/Vendedor/Clientes
+        return true;
       });
-      const removidos = antesDB - DB[env].length;
       DB[env] = [...DB[env], ...parsed];
-      const msg = `✅ DRE importado · ${removidos} linhas DMS substituídas · ${parsed.length} reg. DRE`;
+      const removidos = antesDB - DB[env].length;
+      const msg = `✅ DRE importado · DMS mantido para Segmentos/Vendedores · ${parsed.length} reg. DRE adicionados`;
       if(st2){ st2.textContent=msg; st2.style.color='var(--grn)'; }
-      console.log(`  ${msg} | DB depois: ${DB[env].length}`);
+      console.log(`  ${msg} | DB antes: ${antesDB} | DB depois: ${DB[env].length}`);
     } else {
       const dmsPorChave={};
       DB[env].filter(r=>r._fonte==='dms'&&filSet.has(r.Filial)).forEach(r=>{
@@ -7227,30 +7232,76 @@ function parseDRESheetNovo(sh, env){
   const rowVal = (rowIdx0, ci) => numVal((aoa[rowIdx0]||[])[ci]);
 
   // ── Montar byMes com o mapeamento correto ─────────────────────────────
+  // IMPORTANTE: Linhas com fórmulas (SUM, IFERROR, subtração) são recalculadas
+  // a partir das linhas de valores diretos, pois SheetJS não avalia fórmulas complexas.
+  //
+  // Mapeamento (0-based após header):
+  //   idx 1  = L2  fat_tele      DIRETO
+  //   idx 2  = L3  fat_ofic      DIRETO
+  //   idx 3  = L4  fat_funil     DIRETO
+  //   idx 4  = L5  bon           DIRETO
+  //   idx 5  = L6  outras_rec    DIRETO
+  //   idx 6  = L7  rb            FÓRMULA =SUM(L2:L6) → recalcular
+  //   idx 7  = L8  impostos      DIRETO
+  //   idx 8  = L9  devoluções    DIRETO
+  //   idx 9  = L10 fat_liq       FÓRMULA =L7-L8-L9 → recalcular
+  //   idx 10 = L11 custo_tele    DIRETO
+  //   idx 11 = L12 custo_ofic    DIRETO
+  //   idx 12 = L13 custo_funil   DIRETO
+  //   idx 13 = L14 ajuste_inv    DIRETO
+  //   idx 14 = L15 custo_tot     FÓRMULA =SUM(L11:L14) → recalcular
+  //   idx 15 = L16 lb_r          FÓRMULA =L10-L15 → recalcular
+  //   idx 55 = L56 total_desp    FÓRMULA → ler valor calculado (fallback 0)
+  //   idx 56 = L57 rd            FÓRMULA =L16-L56 → recalcular
+  //   idx 57 = L58 (vazio)
+  //   idx 58 = L59 estq          DIRETO
+  //   idx 59 = L60 prazo_est     FÓRMULA =IFERROR((L59/L15)*30,0) → recalcular
+  //   idx 61 = L62 estq_disp     DIRETO
+  //   idx 64 = L65 estq_req      DIRETO
   const byMes = {};
   Object.entries(colMesAno).forEach(([ci, {mes, ano}]) => {
     const key = `${ano}_${mes}`;
     const c = +ci;
 
-    const fat_tele  = rowVal(1,  c);  // L2  Receitas Vendas-Balção/Telepçs
-    const fat_ofic  = rowVal(2,  c)   // L3  Receitas Vendas- Peças Oficina
-                    + rowVal(3,  c);  // L4  Receitas Vendas-Peças Funilaria (soma em ofic)
-    const bon       = rowVal(4,  c)   // L5  Receitas Bonificações
-                    + rowVal(5,  c);  // L6  Outras Receitas
-    const rb        = rowVal(6,  c);  // L7  Receita Bruta (direto do arquivo)
-    const lb_r      = rowVal(15, c);  // L16 Lucro Bruto
-    const rd        = rowVal(56, c);  // L57 Resultado Departamental
-    const estq      = rowVal(58, c);  // L59 Estoque Geral (valor)  — row index 58 = linha Excel 59
-    const custo_tot = rowVal(14, c);  // L15 Total de Custos
-    const prazo_est = rowVal(59, c);  // L60 Renovação DRE (dias estoque geral)
-    // Dias em Estoque Geral: do arquivo (L60), fallback cálculo (L59/L15)*30
-    const dias_estq = prazo_est > 0 ? prazo_est : (custo_tot > 0 ? (estq / custo_tot) * 30 : 0);
-    const estq_disp  = rowVal(61, c);  // L62 Estoque Disponível
-    const dias_disp  = rowVal(62, c);  // L63 Renovação Sobre Disponivel
-    const estq_req   = rowVal(64, c);  // L65 PEÇAS REQUISITADAS
+    // ── Valores DIRETOS (SheetJS lê corretamente) ──────────────────────
+    const fat_tele   = rowVal(1,  c);  // L2
+    const fat_ofic_r = rowVal(2,  c);  // L3
+    const fat_funil  = rowVal(3,  c);  // L4
+    const fat_ofic   = fat_ofic_r + fat_funil;  // L3+L4
+    const bon_r      = rowVal(4,  c);  // L5 Bonificações
+    const outras_rec = rowVal(5,  c);  // L6 Outras Receitas
+    const bon        = bon_r + outras_rec;
+    const impostos   = rowVal(7,  c);  // L8
+    const devol      = rowVal(8,  c);  // L9
+    const custo_tele = rowVal(10, c);  // L11
+    const custo_ofic = rowVal(11, c);  // L12
+    const custo_funil= rowVal(12, c);  // L13
+    const ajuste_inv = rowVal(13, c);  // L14
+    const estq       = rowVal(58, c);  // L59
+    const estq_disp  = rowVal(61, c);  // L62
+    const estq_req   = rowVal(64, c);  // L65
 
-    // Fat. Líquido = L2+L3+L4 (faturamento departamental, sem descontos/impostos)
-    const fat_liq   = fat_tele + fat_ofic;
+    // ── Recalcular fórmulas ────────────────────────────────────────────
+    // RB = SUM(L2:L6)
+    const rb = fat_tele + fat_ofic_r + fat_funil + bon_r + outras_rec;
+    // Fat. Líquido = RB - Impostos - Devoluções
+    const fat_liq_calc = rb - impostos - devol;
+    const fat_liq = fat_tele + fat_ofic; // para distribuição por canal
+    // Custo Total = SUM(L11:L14)
+    const custo_tot = custo_tele + custo_ofic + custo_funil + ajuste_inv;
+    // Lucro Bruto = Fat.Liq - Custo Total
+    const lb_r = fat_liq_calc - custo_tot;
+    // Total Despesas: tentar ler valor calculado, fallback somar despesas diretas
+    // Ler as despesas diretas: L17-L23 (vendas), L25-L34 (pessoal), L36-L54 (funcionamento)
+    let total_desp = 0;
+    for(let r2 = 16; r2 <= 55; r2++) total_desp += rowVal(r2, c); // L17-L56 (0-based: 16-55)
+    // Resultado Departamental = Lucro Bruto - Total Despesas
+    const rd = lb_r - total_desp;
+    // Dias Estoque = (Estoque / Custo Total) * 30
+    const prazo_est = custo_tot > 0 ? (estq / custo_tot) * 30 : 0;
+    const dias_estq = prazo_est > 0 ? prazo_est : 0;
+    // Dias Disponível
+    const dias_disp = custo_tot > 0 ? (estq_disp / custo_tot) * 30 : 0;
 
     byMes[key] = {ano, mes, fat_tele, fat_ofic, bon, rb, fat_liq, lb_r, rd, estq, dias_estq, estq_disp, dias_disp, estq_req, custo_tot};
   });
