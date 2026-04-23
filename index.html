@@ -3929,15 +3929,18 @@ function aggMetaOnlyDRELBRD(env, rows, indKey){
    DMS continua íntegro para Segmento, Vendedor e Clientes (rowsAllAnos)
 ═══════════════════════════════════════════════ */
 function applyDREPriority(rows){
-  // Checar quais filial|ano|mes têm dados DRE
+  // Checar quais filial|ano|mes têm dados DRE COM VALOR REAL
+  // DRE zerado (meses futuros não preenchidos) NÃO bloqueia o DMS
   const dreKeys=new Set();
-  rows.forEach(r=>{ if(r._fonte==='dre') dreKeys.add(`${r.Filial}|${r.Ano}|${r.Mês_Num}`); });
-  if(!dreKeys.size) return rows; // nenhum DRE → retorna tudo (DMS)
-  // Filtrar: para períodos com DRE, excluir linhas DMS
+  rows.forEach(r=>{
+    if(r._fonte==='dre' && (r.Fat_Real>0 || r.RB_Real>0 || r.LB_Real_R!==0 || r.RD_Real_R!==0))
+      dreKeys.add(`${r.Filial}|${r.Ano}|${r.Mês_Num}`);
+  });
+  if(!dreKeys.size) return rows;
   return rows.filter(r=>{
-    if(r._fonte==='dre') return true;           // DRE sempre entra
+    if(r._fonte==='dre') return true;
     const k=`${r.Filial}|${r.Ano}|${r.Mês_Num}`;
-    return !dreKeys.has(k);                      // DMS só entra se não há DRE no período
+    return !dreKeys.has(k); // DMS só entra se não há DRE com valor no período
   });
 }
 
@@ -7179,7 +7182,9 @@ function parseDRESheetNovo(sh, env){
      LB% = LB / RB    RD% = RD / RB
      Dias em Estoque = (L59 / L15) * 30  (coluna a coluna)
   */
-  const aoa = XLSX.utils.sheet_to_json(sh, {header:1, defval:'', raw:true});
+  // raw:false → SheetJS usa o cache de valores calculados das fórmulas (=SUM, =C10-C15, etc.)
+  // raw:true retornaria a string da fórmula, que não podemos avaliar
+  const aoa = XLSX.utils.sheet_to_json(sh, {header:1, defval:'', raw:false});
   if(aoa.length < 2) return [];
 
   const hdr = aoa[0]; // linha 1 = header
@@ -7302,6 +7307,10 @@ function parseDRESheetNovo(sh, env){
     const dias_estq = prazo_est > 0 ? prazo_est : 0;
     // Dias Disponível
     const dias_disp = custo_tot > 0 ? (estq_disp / custo_tot) * 30 : 0;
+
+    // ── Só registrar se há pelo menos algum valor real ────────────────
+    // Meses futuros/não preenchidos no arquivo terão todos zeros — ignorar
+    if(!fat_tele && !fat_ofic && !rb && !lb_r && !rd) return;
 
     byMes[key] = {ano, mes, fat_tele, fat_ofic, bon, rb, fat_liq, lb_r, rd, estq, dias_estq, estq_disp, dias_disp, estq_req, custo_tot};
   });
@@ -7775,7 +7784,7 @@ function pFile(file){
         filaisNovas = new Set(parsed.map(r=>r.Filial));
 
       } else {
-        const wb=XLSX.read(ev.target.result,{type:'binary', cellDates:false});
+        const wb=XLSX.read(ev.target.result,{type:'binary', cellDates:false, cellFormula:false, raw:false});
 
         if(isOSFile(wb)){
           // ── Arquivo Por Tipo de OS ──
