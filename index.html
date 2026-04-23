@@ -144,13 +144,15 @@ body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;font
 /* ══ FILTERBAR ──────────────────────────────── */
 /* top offset = navbar height only (single bar now) */
 .filterbar{
-  display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow-x:auto;
-  padding:0 16px;height:var(--filter-h);
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  padding:6px 16px;min-height:var(--filter-h);
   background:var(--surf);border-bottom:1px solid var(--brd);
   position:sticky;top:var(--navbar-h);z-index:490;
 }
 .filterbar::-webkit-scrollbar{height:3px;}
 .filterbar::-webkit-scrollbar-thumb{background:var(--brd2);border-radius:2px;}
+/* Separador de linha: força quebra de linha no filterbar */
+.fbr{width:100%;height:0;border:none;margin:0;padding:0;flex-basis:100%;}
 .flbl{font-size:9px;color:var(--txt3);letter-spacing:.7px;text-transform:uppercase;white-space:nowrap;flex-shrink:0;}
 .chips{display:flex;gap:3px;flex-shrink:0;}
 .chip{
@@ -168,15 +170,15 @@ body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;font
 .cmp-b:hover{color:var(--txt);}
 .cmp-b.on{background:var(--acc);color:var(--bg);}
 
-/* Est filterbar — sticky offset accounts for navbar + filter */
+/* Est filterbar — sticky offset accounts for navbar + filter (agora auto height) */
 .filterbar.fb-est{
-  top:calc(var(--navbar-h) + var(--filter-h));
+  top:calc(var(--navbar-h) + 80px);
   z-index:480;
 }
 /* est subnav offset */
 .est-subnav-bar{
   padding:0 16px;background:var(--surf);border-bottom:1px solid var(--brd);
-  position:sticky;top:calc(var(--navbar-h) + var(--filter-h) + var(--filter-h));
+  position:sticky;top:calc(var(--navbar-h) + 80px + var(--filter-h));
   z-index:470;flex-wrap:nowrap;overflow-x:auto;
 }
 
@@ -860,6 +862,7 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
 <div class="env-page active" id="env-mb-page">
   <!-- FILTER MB -->
   <div class="filterbar" id="fb-mb">
+    <!-- Linha 1: Núcleos + Filial -->
     <span class="flbl">Núcleos</span>
     <div class="chips" id="fNucleoMB">
       <div class="chip on-mb" onclick="fAllNucleo('mb',this)">Todos</div>
@@ -878,7 +881,8 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
       <div class="chip" onclick="fTogFilial('mb',this,'Alumínio')">Alumínio</div>
       <div class="chip dsh" onclick="addFilial('mb')">+ Filial</div>
     </div>
-    <div class="fsep"></div>
+    <!-- Linha 2: Ano + Mês + Depto -->
+    <div class="fbr"></div>
     <div class="chips" id="main-anos-mb" style="flex-wrap:nowrap"></div>
     <div class="fsep"></div>
     <span class="flbl">Mês</span>
@@ -3002,14 +3006,16 @@ async function loadState(){
   try{
     const useIDB=localStorage.getItem(LS_KEY+'_idb')==='1';
     let raw=null;
+    console.group('💾 loadState — carregando dados locais');
+    console.log(`  Fonte: ${useIDB ? 'IndexedDB' : 'localStorage'}`);
     if(useIDB){
       raw=await idbGet();
     } else {
       raw=localStorage.getItem(LS_KEY);
     }
-    if(!raw) return false;
+    if(!raw){ console.warn('  Nenhum dado local encontrado'); console.groupEnd(); return false; }
     const payload=JSON.parse(raw);
-    if(!payload||!payload.DB) return false;
+    if(!payload||!payload.DB){ console.warn('  Payload inválido'); console.groupEnd(); return false; }
     DB.mb=[...(payload.DB.mb||[])];
     DB.mc=[...(payload.DB.mc||[])];
     Object.assign(METAS, payload.METAS||{});
@@ -3025,6 +3031,8 @@ async function loadState(){
     }
     ['mb','mc'].forEach(env=>{
       [...new Set(DB[env].map(r=>+r.Ano))].forEach(a=>{ if(!ANOS_LIST.includes(a)) ANOS_LIST.push(a); });
+      const filsEnv=[...new Set(DB[env].map(r=>r.Filial).filter(f=>f&&f!=='—'))].sort();
+      console.log(`  ${env.toUpperCase()}: ${DB[env].length} registros | Filiais: ${filsEnv.join(', ')||'nenhuma'} | Anos: ${[...new Set(DB[env].map(r=>r.Ano))].sort().join(', ')}`);
     });
     ANOS_LIST.sort((a,b)=>a-b);
     syncSegmentos(DB.mb); syncSegmentos(DB.mc);
@@ -3052,6 +3060,8 @@ async function loadState(){
     const fmt=`${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
     _setSaveIndicator(`💾 ${fmt}`,null,false);
     document.getElementById('save-indicator').style.opacity='0.6';
+    console.log(`  ✅ Carregado — salvo em ${fmt} | Metas: ${Object.keys(payload.METAS||{}).length}`);
+    console.groupEnd();
     return true;
   }catch(e){
     console.warn('localStorage/IDB load falhou:', e);
@@ -3244,7 +3254,7 @@ function importData(){
         syncSegmentos(DB.mb); syncSegmentos(DB.mc);
         syncOSFromFile(DB.mb); syncOSFromFile(DB.mc);
         if(typeof syncOsTypes==='function'){ syncOsTypes(DB.mb); syncOsTypes(DB.mc); }
-        ['mb','mc'].forEach(env=>{ initAnoChips(env); renderStatusStrip(env); renderAll(env); });
+        ['mb','mc'].forEach(env=>{ initAnoChips(env); initFilialChips(env); renderStatusStrip(env); renderAll(env); });
         saveState();
         const exp=payload.exportedAt?new Date(payload.exportedAt).toLocaleDateString('pt-BR'):'';
         const el=document.getElementById('save-indicator');
@@ -3602,6 +3612,49 @@ function mkChips(containerId,env,stateKey,cb){
     wrap.appendChild(c);
   });
 }
+// ── Chips de filial dinâmicos — gerados a partir dos dados reais ──────────
+// Resolve o problema de novas filiais (DN SJC, etc.) não aparecerem nos filtros
+function initFilialChips(env){
+  const wrap = document.getElementById('fFil'+env.toUpperCase());
+  if(!wrap) return;
+
+  // Filiais presentes nos dados
+  const filsNoDado = [...new Set((DB[env]||[]).map(r=>r.Filial).filter(f=>f&&f!=='—'))].sort();
+  if(!filsNoDado.length) return;
+
+  // Manter chips fixos: "Todas" e "+ Filial"
+  // Preservar seleção atual
+  const selAtual = new Set([...F[env].filial]);
+
+  wrap.innerHTML = '';
+
+  // Chip "Todas"
+  const allChip = document.createElement('div');
+  allChip.className = 'chip' + (F[env].filial.has('all') ? ' on-'+env : '');
+  allChip.textContent = 'Todas';
+  allChip.onclick = () => fAllFilial(env, allChip);
+  wrap.appendChild(allChip);
+
+  // Chips por filial
+  filsNoDado.forEach(f => {
+    const c = document.createElement('div');
+    c.className = 'chip' + (selAtual.has(f) ? ' on-'+env : '');
+    c.textContent = f;
+    c.onclick = () => fTogFilial(env, c, f);
+    wrap.appendChild(c);
+  });
+
+  // Chip "+ Filial"
+  const addChip = document.createElement('div');
+  addChip.className = 'chip dsh';
+  addChip.textContent = '+ Filial';
+  addChip.onclick = () => addFilial(env);
+  wrap.appendChild(addChip);
+
+  // Log para console
+  console.log(`🏢 Filiais ${env.toUpperCase()} detectadas:`, filsNoDado.join(', '));
+}
+
 function initAnoChips(env){
   // Garantir que os sets de anos reflitam os dados disponíveis
   // Se ainda vazios, pré-selecionar o ano atual (ou o mais recente disponível)
@@ -6168,6 +6221,14 @@ function resolveConflito(modo){
 
 function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
   const fonte = parsed[0]?._fonte||'dms';
+  const _logAnos = [...new Set(parsed.map(r=>r.Ano))].sort();
+  const _logMeses = [...new Set(parsed.map(r=>r.Mês_Num))].sort((a,b)=>a-b);
+  console.group(`📥 aplicarParsed [${env.toUpperCase()}] — ${tipo}`);
+  console.log(`  Modo: ${modo} | Fonte: ${fonte}`);
+  console.log(`  Filiais: ${[...filaisNovas].join(', ')}`);
+  console.log(`  Anos: ${_logAnos.join(', ')} | Meses: ${_logMeses.map(m=>['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m-1]).join(', ')}`);
+  console.log(`  Registros: ${parsed.length}`);
+  console.groupEnd();
 
   if(modo==='substituir'){
     // Apagar existentes da mesma filial+ano+mes+fonte, depois adicionar novos
@@ -6231,7 +6292,7 @@ function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
   // Reparar OS rows com Ano=0
   const _maxAno = Math.max(...DB[env].map(r=>r.Ano||0).filter(a=>a>0), new Date().getFullYear());
   DB[env].forEach(r=>{ if(r._fonte==='os' && (!r.Ano||r.Ano===0)) r.Ano=_maxAno; });
-  initAnoChips(env);
+  initAnoChips(env); initFilialChips(env);
   renderMetaTable();
   renderStatusStrip(env);
   saveState();
@@ -6312,7 +6373,7 @@ function resolveDREConflict(escolha, filiais, anos, meses, env){
     syncOsTypes(DB[env]);
     syncOSFromFile(DB[env]);
     syncSegmentos(DB[env]);
-    initAnoChips(env);
+    initAnoChips(env); initFilialChips(env);
     renderStatusStrip(env);
     renderAll(env);
     saveState();
@@ -6388,7 +6449,7 @@ window.addEventListener('load',()=>{
   (_snapLoaded ? Promise.resolve(true) : loadState()).then(loaded=>{
     if(loaded){
       ['mb','mc'].forEach(env=>{
-        initAnoChips(env);
+        initAnoChips(env); initFilialChips(env);
         renderStatusStrip(env);
         setTimeout(()=>renderAll(env), 80);
       });
@@ -7582,7 +7643,7 @@ function pFile(file){
         syncOSFromFile(DB[upEnv]);
         renderStatusStrip(upEnv);
         saveState();
-        initAnoChips(upEnv);
+        initAnoChips(upEnv); initFilialChips(upEnv);
         renderAll(upEnv);
 
         // ═══ ENVIO AUTOMÁTICO PARA GOOGLE SHEETS ══════════════════
@@ -8444,8 +8505,8 @@ function appInit(){
   if(Object.keys(EST_DATA.mb.snapshots||{}).length){ initEstFilters('mb'); renderEstoque('mb'); }
   if(Object.keys(EST_DATA.mc.snapshots||{}).length){ initEstFilters('mc'); renderEstoque('mc'); }
   loadDespState();
-  initAnoChips('mb');
-  initAnoChips('mc');
+  initAnoChips('mb'); initFilialChips('mb');
+  initAnoChips('mc'); initFilialChips('mc');
   initOsChecks();
   initSegChecks();
 
@@ -8465,9 +8526,11 @@ function appInit(){
 
 async function _sincronizarTudoDoSheets(){
   try {
+    console.group('🔄 _sincronizarTudoDoSheets — início');
     mostrarToastSync('🔄 Sincronizando dados do Google Sheets...', 'info');
 
     // ── Vendas MB ──────────────────────────────────────────────
+    console.log('📡 Buscando Vendas MB...');
     const vendasMB = await lerDoSheets('vendas', 'mb');
     if(vendasMB && vendasMB.length > 0){
       DB.mb = vendasMB;
@@ -8476,13 +8539,17 @@ async function _sincronizarTudoDoSheets(){
       syncSegmentos(DB.mb);
       [...new Set(DB.mb.map(r=>+r.Ano))].forEach(a=>{ if(!ANOS_LIST.includes(a)) ANOS_LIST.push(a); });
       ANOS_LIST.sort((a,b)=>a-b);
-      initAnoChips('mb');
+      initAnoChips('mb'); initFilialChips('mb');
       renderStatusStrip('mb');
       renderAll('mb');
-      console.log(`✅ Vendas MB carregadas do Sheets: ${DB.mb.length} registros`);
+      const filsMB=[...new Set(DB.mb.map(r=>r.Filial))].sort();
+      console.log(`✅ Vendas MB: ${DB.mb.length} registros | Filiais: ${filsMB.join(', ')}`);
+    } else {
+      console.warn('⚠️ Vendas MB: sem dados no Sheets');
     }
 
     // ── Vendas MC ──────────────────────────────────────────────
+    console.log('📡 Buscando Vendas MC...');
     const vendasMC = await lerDoSheets('vendas', 'mc');
     if(vendasMC && vendasMC.length > 0){
       DB.mc = vendasMC;
@@ -8491,10 +8558,13 @@ async function _sincronizarTudoDoSheets(){
       syncSegmentos(DB.mc);
       [...new Set(DB.mc.map(r=>+r.Ano))].forEach(a=>{ if(!ANOS_LIST.includes(a)) ANOS_LIST.push(a); });
       ANOS_LIST.sort((a,b)=>a-b);
-      initAnoChips('mc');
+      initAnoChips('mc'); initFilialChips('mc');
       renderStatusStrip('mc');
       renderAll('mc');
-      console.log(`✅ Vendas MC carregadas do Sheets: ${DB.mc.length} registros`);
+      const filsMC=[...new Set(DB.mc.map(r=>r.Filial))].sort();
+      console.log(`✅ Vendas MC: ${DB.mc.length} registros | Filiais: ${filsMC.join(', ')}`);
+    } else {
+      console.warn('⚠️ Vendas MC: sem dados no Sheets');
     }
 
     // Salvar no IDB (suporta volumes grandes, sem limite de cota)
@@ -8546,10 +8616,13 @@ async function _sincronizarTudoDoSheets(){
       }
     }
 
+    console.log('✅ Sincronização concluída!');
+    console.groupEnd();
     mostrarToastSync('✅ Dados sincronizados com Google Sheets!', 'success');
 
   } catch(err){
-    console.warn('⚠️ Erro ao sincronizar do Sheets:', err);
+    console.error('❌ Erro ao sincronizar do Sheets:', err);
+    console.groupEnd();
     mostrarToastSync('⚠️ Não foi possível sincronizar com Sheets', 'warning');
   }
 }
