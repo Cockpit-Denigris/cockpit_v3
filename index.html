@@ -1086,12 +1086,14 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
     <div class="tab-page" id="mb-est">
       <!-- FILTERBAR EST (hidden until goTab activates) -->
       <div class="filterbar fb-est" id="fb-est-mb" style="display:none">
+        <!-- Linha 1: Núcleos + Filial -->
         <span class="flbl">Núcleos</span>
         <div class="chips" id="chips-est-nucleo-mb"></div>
         <div class="fsep"></div>
         <span class="flbl">Filial</span>
         <div class="chips" id="chips-est-fil-mb"></div>
-        <div class="fsep"></div>
+        <!-- Linha 2: Técnico + Curva + Mobilidade + Grupo + Carregar -->
+        <div class="fbr"></div>
         <span class="flbl">Est. Técnico?</span>
         <div class="chips" id="chips-est-tec-mb"></div>
         <div class="fsep"></div>
@@ -1543,9 +1545,14 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
     </div>
   </div>
   <div class="filterbar fb-est" id="fb-est-mc" style="display:none">
+    <!-- Linha 1: Núcleos + Filial -->
+    <span class="flbl">Núcleos</span>
+    <div class="chips" id="chips-est-nucleo-mc"></div>
+    <div class="fsep"></div>
     <span class="flbl">Filial</span>
     <div class="chips" id="chips-est-fil-mc"></div>
-    <div class="fsep"></div>
+    <!-- Linha 2: Técnico + Curva + Mobilidade + Grupo + Carregar -->
+    <div class="fbr"></div>
     <span class="flbl">Est. Técnico?</span>
     <div class="chips" id="chips-est-tec-mc"></div>
     <div class="fsep"></div>
@@ -1980,25 +1987,25 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
         <div style="font-size:12px;color:var(--red);font-weight:700;margin-bottom:10px">🗑 Limpar Dados</div>
 
         <!-- Filtros de seleção -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+        <div style="display:grid;grid-template-columns:minmax(160px,1fr) minmax(140px,1fr) minmax(180px,1fr);gap:10px;margin-bottom:12px;align-items:start">
           <!-- Tipo de arquivo -->
           <div>
             <div style="font-size:10px;color:var(--txt3);font-weight:600;margin-bottom:5px;letter-spacing:.04em">TIPO DE ARQUIVO</div>
-            <div id="clr-tipo-wrap" style="background:var(--card);border:1px solid var(--brd);border-radius:6px;padding:6px 8px;display:flex;flex-direction:column;gap:4px">
-              <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;color:var(--txt2)">
-                <input type="checkbox" id="clr-tipo-all" value="all" onchange="clrTipoToggleAll(this)"> Todos os tipos
+            <div id="clr-tipo-wrap" style="background:var(--card);border:1px solid var(--brd);border-radius:6px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;min-height:140px">
+              <label style="display:flex;align-items:center;gap:7px;font-size:11px;cursor:pointer;color:var(--txt2);white-space:nowrap;padding:2px 0">
+                <input type="checkbox" id="clr-tipo-all" value="all" onchange="clrTipoToggleAll(this)" style="flex-shrink:0"> Todos os tipos
               </label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;color:var(--txt2)">
-                <input type="checkbox" class="clr-tipo-cb" value="dms" onchange="clrTipoChk(this)"> 📋 DMS Transacional
+              <label style="display:flex;align-items:center;gap:7px;font-size:11px;cursor:pointer;color:var(--txt2);white-space:nowrap;padding:2px 0">
+                <input type="checkbox" class="clr-tipo-cb" value="dms" onchange="clrTipoChk(this)" style="flex-shrink:0"> 📋 DMS Transacional
               </label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;color:var(--txt2)">
-                <input type="checkbox" class="clr-tipo-cb" value="dre" onchange="clrTipoChk(this)"> 📈 DRE Gerencial
+              <label style="display:flex;align-items:center;gap:7px;font-size:11px;cursor:pointer;color:var(--txt2);white-space:nowrap;padding:2px 0">
+                <input type="checkbox" class="clr-tipo-cb" value="dre" onchange="clrTipoChk(this)" style="flex-shrink:0"> 📈 DRE Gerencial
               </label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;color:var(--txt2)">
-                <input type="checkbox" class="clr-tipo-cb" value="orca" onchange="clrTipoChk(this)"> 📊 Orçamento/Metas
+              <label style="display:flex;align-items:center;gap:7px;font-size:11px;cursor:pointer;color:var(--txt2);white-space:nowrap;padding:2px 0">
+                <input type="checkbox" class="clr-tipo-cb" value="orca" onchange="clrTipoChk(this)" style="flex-shrink:0"> 📊 Orçamento/Metas
               </label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;color:var(--txt2)">
-                <input type="checkbox" class="clr-tipo-cb" value="os" onchange="clrTipoChk(this)"> 🔧 Por Tipo de OS
+              <label style="display:flex;align-items:center;gap:7px;font-size:11px;cursor:pointer;color:var(--txt2);white-space:nowrap;padding:2px 0">
+                <input type="checkbox" class="clr-tipo-cb" value="os" onchange="clrTipoChk(this)" style="flex-shrink:0"> 🔧 Por Tipo de OS
               </label>
             </div>
           </div>
@@ -3510,7 +3517,10 @@ function goFatSub(env,sub,btn){
     if(b){ b.classList.remove('mb-on','mc-on'); if(s===sub) b.classList.add(env==='mb'?'mb-on':'mc-on'); }
   });
   _fatSubCur[env]=sub;
-  if(sub==='vend') renderVend(env, _lastAllRows[env]||getRowsNoAno(env));
+  // Renderizar imediatamente ao abrir a sub-aba (sem precisar interagir com filtros)
+  const rowsAllAnos = _lastAllRows[env] || getRowsNoAno(env);
+  if(sub==='seg')  renderTblSeg(rowsAllAnos, env);
+  if(sub==='vend') renderVend(env, rowsAllAnos);
   if(sub==='cli')  renderClientes(env);
 }
 
@@ -6533,7 +6543,22 @@ function swUT(t){
   }
   if(t==='clr'){
     document.querySelectorAll('.clr-tipo-cb, #clr-tipo-all').forEach(c=>{ c.checked=false; });
-    const filEl=document.getElementById('clr-fil'); if(filEl) filEl.value='';
+    // Popular filiais dinamicamente a partir dos dados reais do DB
+    const filSel = document.getElementById('clr-fil');
+    if(filSel){
+      const env = upEnv||'mb';
+      const filsNoDb = [...new Set([
+        ...(DB.mb||[]).map(r=>r.Filial),
+        ...(DB.mc||[]).map(r=>r.Filial)
+      ].filter(f=>f&&f!=='—'))].sort();
+      filSel.innerHTML = '<option value="">— Selecione —</option><option value="all">Todas as filiais</option>';
+      filsNoDb.forEach(f=>{
+        const o = document.createElement('option');
+        o.value=f; o.textContent=f;
+        filSel.appendChild(o);
+      });
+      filSel.value='';
+    }
     const preview=document.getElementById('clr-preview');
     if(preview) preview.innerHTML=`<span style="color:var(--txt3)">Selecione pelo menos um Tipo de Arquivo e a Filial.</span>`;
     const btn=document.getElementById('clr-exec-btn');
