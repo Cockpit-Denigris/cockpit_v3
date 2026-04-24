@@ -2714,46 +2714,52 @@ function clrExecutar(){
   saveState();
   renderAll(env);
   
-  // ═══ LIMPAR DO GOOGLE SHEETS ═══════════════════════════════════
+  // ═══ LIMPAR DO GOOGLE SHEETS — GRANULAR ════════════════════════
   if (SHEETS_CONFIG && SHEETS_CONFIG.enabled) {
-    // Determinar qual tipo limpar no Sheets
-    const tiposSheets = [];
-    if (f.tipos.includes('all')) {
-      tiposSheets.push('vendas', 'estoque', 'despesas');
-    } else {
-      if (f.tipos.includes('dms') || f.tipos.includes('dre') || f.tipos.includes('os')) {
-        tiposSheets.push('vendas');
-      }
-      if (clearEst) {
-        tiposSheets.push('estoque');
-      }
-    }
-    
-    // Limpar cada tipo do Sheets e reenviar o que sobrou
-    for (const tipo of tiposSheets) {
-      try {
-        // 1. Apagar tudo do Sheets para esse tipo/env
-        await limparDoSheets(tipo, env);
-        console.log(`✅ ${tipo} limpo do Sheets`);
+    (async ()=>{
+      try{
+        // Montar filtros granulares a partir do que foi selecionado no UI
+        const filtrosSheets = {};
+        if(f.fil && f.fil !== 'all') filtrosSheets.filial = f.fil;
+        if(f.ano > 0) filtrosSheets.ano = f.ano;
+        if(f.mes > 0) filtrosSheets.mes = f.mes;
 
-        // 2. Reenviar o que sobrou no DB (espelho fiel do localStorage)
-        if (tipo === 'vendas' && DB[env].length > 0) {
-          await enviarParaSheets('vendas', env, DB[env], 'append');
-          console.log(`✅ Vendas ${env.toUpperCase()} reenviadas ao Sheets: ${DB[env].length} registros`);
+        // Determinar tipos a limpar
+        const tiposSheets = [];
+        if(f.tipos.includes('all')){
+          tiposSheets.push('vendas','estoque','despesas');
+        } else {
+          if(f.tipos.includes('dms')) filtrosSheets.fonte = 'dms';
+          else if(f.tipos.includes('dre')) filtrosSheets.fonte = 'dre';
+          else if(f.tipos.includes('os')) filtrosSheets.fonte = 'os';
+          if(f.tipos.some(t=>['dms','dre','os','orca'].includes(t))) tiposSheets.push('vendas');
+          if(clearEst) tiposSheets.push('estoque');
         }
-        if (tipo === 'estoque') {
-          const allItems = Object.values(EST_DATA[env]?.snapshots||{}).flat();
-          if (allItems.length > 0) {
-            await enviarParaSheets('estoque', env, allItems, 'append');
-            console.log(`✅ Estoque ${env.toUpperCase()} reenviado ao Sheets: ${allItems.length} itens`);
+
+        // Deletar granular no Sheets — sem reenviar DB inteiro!
+        for(const tipo of tiposSheets){
+          const temFiltro = Object.keys(filtrosSheets).length > 0;
+          if(temFiltro){
+            // 🚀 RÁPIDO: deleta só as linhas que correspondem aos filtros
+            await limparDoSheets(tipo, env, filtrosSheets);
+            console.log(`🗑️ ${tipo} MB: delete granular ${JSON.stringify(filtrosSheets)}`);
+          } else {
+            // Sem filtros específicos → apagar tudo + reenviar (operação completa)
+            await limparDoSheets(tipo, env);
+            if(tipo === 'vendas' && DB[env].length > 0){
+              await enviarParaSheets('vendas', env, DB[env], 'append');
+            }
+            if(tipo === 'estoque'){
+              const allItems = Object.values(EST_DATA[env]?.snapshots||{}).flat();
+              if(allItems.length > 0) await enviarParaSheets('estoque', env, allItems, 'append');
+            }
           }
         }
-      } catch (error) {
-        console.warn(`⚠️ Erro ao limpar/reenviar ${tipo} do Sheets:`, error);
+        mostrarToastSync('✅ Dados limpos no Sheets!', 'success');
+      }catch(err){
+        console.warn('⚠️ Sheets sync erro:', err);
       }
-    }
-    
-    mostrarToastSync('✅ Dados limpos e Sheets sincronizado!', 'success');
+    })();
   }
   // ════════════════════════════════════════════════════════════════
   
@@ -6344,14 +6350,27 @@ function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
     (async ()=>{
       try{
         if(modo === 'substituir'){
-          // Limpar TUDO do Sheets e reenviar DB completo (evita duplicatas)
-          await limparDoSheets('vendas', env);
-          await enviarParaSheets('vendas', env, DB[env], 'append');
+          // 🚀 RÁPIDO: deletar apenas as linhas do período/filial substituído
+          // Coletar filiais e períodos afetados
+          const filsAfetadas = [...new Set(parsed.map(r=>r.Filial))];
+          const anosAfetados  = [...new Set(parsed.map(r=>r.Ano))];
+          const mesesAfetados = [...new Set(parsed.map(r=>r.Mês_Num))];
+          // Se afeta múltiplas filiais/períodos, usar loop; senão delete único
+          for(const fil of filsAfetadas){
+            for(const ano of anosAfetados){
+              for(const mes of mesesAfetados){
+                await limparDoSheets('vendas', env, {filial:fil, ano, mes, fonte});
+              }
+            }
+          }
+          // Enviar só os registros novos (não o DB inteiro)
+          await enviarParaSheets('vendas', env, parsed, 'append');
         } else {
+          // Acumular: só append
           await enviarParaSheets('vendas', env, parsed, 'append');
         }
         mostrarToastSync(`✅ Dados salvos no Sheets (${modoLabel})`, 'success');
-      }catch(err){ console.warn('⚠️ Erro ao sincronizar com Sheets:', err); }
+      }catch(err){ console.warn('⚠️ Sheets sync erro:', err); }
     })();
   }
   // ════════════════════════════════════════════════════════════════
@@ -12845,29 +12864,32 @@ function exportDespExcel(env){
 // ════════════════════════════════════════════════════════════════
 
 // ── Função: Limpar dados do Google Sheets ──────────────────────
-async function limparDoSheets(tipo, ambiente, periodo = null) {
+// ── limparDoSheets: suporta filtros granulares ─────────────────
+// filtros: { filial, ano, mes, fonte } — todos opcionais
+// sem filtros → apaga a aba inteira (delete_all)
+async function limparDoSheets(tipo, ambiente, filtros = null) {
   if (!SHEETS_CONFIG || !SHEETS_CONFIG.enabled) {
     return { sucesso: false, motivo: 'disabled' };
   }
-
   try {
     const payload = {
       token: SHEETS_CONFIG.token,
-      tipo: tipo,
-      ambiente: ambiente,
+      tipo, ambiente,
       acao: 'delete',
-      periodo: periodo,
-      usuario: window.currentUser?.nome || 'Sistema'
+      usuario: _currentUser?.nome || 'Sistema'
     };
-    
-    const response = await fetch(SHEETS_CONFIG.apiUrl, {
+    // Filtros granulares: só adiciona se especificado
+    if(filtros && Object.keys(filtros).length > 0){
+      payload.filtros = filtros;
+    }
+    await fetch(SHEETS_CONFIG.apiUrl, {
       method: 'POST',
       body: JSON.stringify(payload),
       mode: 'no-cors'
     });
-    
-    return { sucesso: true, mensagem: 'Requisição enviada' };
-    
+    const desc = filtros ? JSON.stringify(filtros) : 'tudo';
+    console.log(`🗑️ Sheets delete [${tipo}_${ambiente.toUpperCase()}]: ${desc}`);
+    return { sucesso: true };
   } catch (error) {
     console.error('❌ Erro ao limpar do Sheets:', error);
     return { sucesso: false, erro: error.message };
