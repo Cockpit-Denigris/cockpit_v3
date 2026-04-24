@@ -7225,30 +7225,44 @@ function parseDRESheetNovo(sh, env){
      LB% = LB / RB    RD% = RD / RB
      Dias em Estoque = (L59 / L15) * 30  (coluna a coluna)
   */
-  // raw:false → SheetJS usa o cache de valores calculados das fórmulas (=SUM, =C10-C15, etc.)
-  // raw:true retornaria a string da fórmula, que não podemos avaliar
-  const aoa = XLSX.utils.sheet_to_json(sh, {header:1, defval:'', raw:false});
+  // raw:true → SheetJS retorna seriais numéricos para datas (ex: 45292 = Jan/2024)
+  // Fórmulas retornam string ("=SUM(...)") mas recalculamos manualmente abaixo
+  const aoa = XLSX.utils.sheet_to_json(sh, {header:1, defval:'', raw:true});
   if(aoa.length < 2) return [];
 
   const hdr = aoa[0]; // linha 1 = header
 
   // ── Mapear colunas de meses ────────────────────────────────────────────
   const colMesAno = {};
+  const MES_EN = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+  const MES_PT = {jan:1,fev:2,mar:3,abr:4,mai:5,jun:6,jul:7,ago:8,set:9,out:10,nov:11,dez:12};
+
   hdr.forEach((v, ci) => {
     if(ci < 2) return;
     let mes=0, ano=0;
-    // Remover aspas simples prefixadas do Excel
+    // Remover aspas simples prefixadas
     const vClean = typeof v === 'string' ? v.replace(/^'+/,'').trim() : v;
-    if(vClean instanceof Date || (typeof vClean === 'object' && vClean && vClean.getMonth)){
-      try { const d = new Date(vClean); mes=d.getUTCMonth()+1; ano=d.getUTCFullYear(); } catch{}
+
+    // Serial numérico Excel (raw:true)
+    if(typeof vClean === 'number' && vClean > 40000){
+      const r = xlSerialToMesAno(vClean);
+      if(r){ mes=r.mes; ano=r.ano; }
     }
-    if(!mes){
-      if(typeof vClean === 'string'){
-        const mISO = vClean.match(/^(\d{4})-(\d{2})/);
-        if(mISO){ ano=+mISO[1]; mes=+mISO[2]; }
+    // String ISO: "2024-01-01" ou "2024-01-01T..."
+    if(!mes && typeof vClean === 'string'){
+      const mISO = vClean.match(/^(\d{4})-(\d{2})/);
+      if(mISO){ ano=+mISO[1]; mes=+mISO[2]; }
+    }
+    // Formato "Jan-24" ou "Jan-2024" (number_format='mmm-yy')
+    if(!mes && typeof vClean === 'string'){
+      const mMMM = vClean.match(/^([A-Za-z]{3})[- ](\d{2,4})$/);
+      if(mMMM){
+        const nomeMes = mMMM[1].toLowerCase();
+        mes = MES_EN[nomeMes] || MES_PT[nomeMes] || 0;
+        ano = +mMMM[2];
+        if(ano < 100) ano += 2000; // "24" → 2024
       }
     }
-    if(!mes){ const r = xlSerialToMesAno(vClean); if(r){ mes=r.mes; ano=r.ano; } }
     if(mes && ano && ano >= 2020 && ano <= 2035) colMesAno[ci] = {mes, ano};
   });
   if(!Object.keys(colMesAno).length) return [];
@@ -7257,19 +7271,18 @@ function parseDRESheetNovo(sh, env){
   const filialRaw = String(aoa[1]?.[0] || '').replace(/^'+/,'').trim();
   const filialNome = mapFilial(filialRaw) || filialRaw || 'Desconhecida';
 
-  // ── Extrator de valor numérico de uma célula ──────────────────────────
-  // O arquivo tem aspas simples prefixadas: '433587.72' → precisa remover
+  // ── Extrator de valor numérico ─────────────────────────────────────────
+  // raw:true: números diretos chegam como number, fórmulas como string "=SUM(...)"
+  // Fórmulas são ignoradas (retornam 0) — recalculamos manualmente abaixo
   const numVal = raw => {
     if(typeof raw === 'number') return isFinite(raw) ? raw : 0;
     const s = String(raw||'').replace(/^'+/,'').trim(); // remove aspas simples prefixadas
-    if(!s) return 0;
-    // Parse direto (número EN)
+    if(!s || s.startsWith('=')) return 0; // fórmulas → 0, recalculadas abaixo
     const direct = parseFloat(s);
     if(!isNaN(direct)) return direct;
     // Formato BR: "1.234.567,89"
     const br = parseFloat(s.replace(/\./g,'').replace(',','.'));
-    if(!isNaN(br)) return br;
-    return 0;
+    return isNaN(br) ? 0 : br;
   };
 
   // Helper para limpar string com aspas prefixadas
