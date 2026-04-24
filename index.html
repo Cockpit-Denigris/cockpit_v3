@@ -7193,14 +7193,13 @@ function isDREFile(wb){
 }
 
 function isNewDREFormat(wb){
-  // Formato NOVO: col0='FILIAL', col1='TIPO', cols 2+ = datas mensais
-  // Detecta pela 1ª aba — se header tem FILIAL + TIPO é o novo formato
   const sh0=wb.Sheets[wb.SheetNames[0]];
   if(!sh0) return false;
   const aoa=XLSX.utils.sheet_to_json(sh0,{header:1,defval:'',raw:true});
   const hdr=aoa[0]||[];
-  return (String(hdr[0]||'').toUpperCase().includes('FILIAL') &&
-          String(hdr[1]||'').toUpperCase().includes('TIPO'));
+  // Remover aspas simples prefixadas que Excel adiciona em células de texto forçado
+  const clean = v => String(v||'').replace(/^'+|'+$/g,'').trim().toUpperCase();
+  return (clean(hdr[0]).includes('FILIAL') && clean(hdr[1]).includes('TIPO'));
 }
 
 // ── Parser DRE Novo Formato (multi-aba, uma filial por aba) ─────────────────
@@ -7234,37 +7233,37 @@ function parseDRESheetNovo(sh, env){
   const hdr = aoa[0]; // linha 1 = header
 
   // ── Mapear colunas de meses ────────────────────────────────────────────
-  const colMesAno = {}; // colIdx → {mes, ano}
+  const colMesAno = {};
   hdr.forEach((v, ci) => {
     if(ci < 2) return;
     let mes=0, ano=0;
-    if(v instanceof Date || (typeof v === 'object' && v && v.getMonth)){
-      try { const d = new Date(v); mes=d.getUTCMonth()+1; ano=d.getUTCFullYear(); } catch{}
+    // Remover aspas simples prefixadas do Excel
+    const vClean = typeof v === 'string' ? v.replace(/^'+/,'').trim() : v;
+    if(vClean instanceof Date || (typeof vClean === 'object' && vClean && vClean.getMonth)){
+      try { const d = new Date(vClean); mes=d.getUTCMonth()+1; ano=d.getUTCFullYear(); } catch{}
     }
     if(!mes){
-      // Suporte a string ISO: "2024-01-01 00:00:00" ou "2024-01-01"
-      if(typeof v === 'string'){
-        const mISO = v.match(/^(\d{4})-(\d{2})/);
+      if(typeof vClean === 'string'){
+        const mISO = vClean.match(/^(\d{4})-(\d{2})/);
         if(mISO){ ano=+mISO[1]; mes=+mISO[2]; }
       }
     }
-    if(!mes){ const r = xlSerialToMesAno(v); if(r){ mes=r.mes; ano=r.ano; } }
+    if(!mes){ const r = xlSerialToMesAno(vClean); if(r){ mes=r.mes; ano=r.ano; } }
     if(mes && ano && ano >= 2020 && ano <= 2035) colMesAno[ci] = {mes, ano};
   });
   if(!Object.keys(colMesAno).length) return [];
 
-  // ── Ler filial do col 0 da 1ª linha de dados ──────────────────────────
-  const filialRaw = String(aoa[1]?.[0] || '').trim();
+  // ── Ler filial (remover aspas simples prefixadas) ─────────────────────
+  const filialRaw = String(aoa[1]?.[0] || '').replace(/^'+/,'').trim();
   const filialNome = mapFilial(filialRaw) || filialRaw || 'Desconhecida';
 
   // ── Extrator de valor numérico de uma célula ──────────────────────────
-  // raw:false: fórmulas retornam valor calculado (number), mas pode vir
-  // como string formatada "1.234.567,89" (BR) em algumas versões do SheetJS
+  // O arquivo tem aspas simples prefixadas: '433587.72' → precisa remover
   const numVal = raw => {
     if(typeof raw === 'number') return isFinite(raw) ? raw : 0;
-    const s = String(raw||'').trim();
+    const s = String(raw||'').replace(/^'+/,'').trim(); // remove aspas simples prefixadas
     if(!s) return 0;
-    // Parse direto (número EN padrão)
+    // Parse direto (número EN)
     const direct = parseFloat(s);
     if(!isNaN(direct)) return direct;
     // Formato BR: "1.234.567,89"
@@ -7272,6 +7271,9 @@ function parseDRESheetNovo(sh, env){
     if(!isNaN(br)) return br;
     return 0;
   };
+
+  // Helper para limpar string com aspas prefixadas
+  const cleanStr = v => String(v||'').replace(/^'+/,'').trim();
 
   // ── Leitura por índice de linha fixo (0-based após header) ────────────
   //   aoa[0] = header → aoa[1] = linha Excel 2 → aoa[i] = linha Excel i+1
