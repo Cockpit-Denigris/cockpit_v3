@@ -1987,45 +1987,44 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
         <div style="font-size:12px;color:var(--red);font-weight:700;margin-bottom:10px">🗑 Limpar Dados</div>
 
         <!-- Filtros de seleção -->
-        <div style="display:grid;grid-template-columns:minmax(160px,1fr) minmax(140px,1fr) minmax(180px,1fr);gap:10px;margin-bottom:12px;align-items:start">
-          <!-- Tipo de arquivo -->
-          <div>
-            <div style="font-size:10px;color:var(--txt3);font-weight:600;margin-bottom:5px;letter-spacing:.04em">TIPO DE ARQUIVO</div>
-            <div id="clr-tipo-wrap" style="background:var(--card);border:1px solid var(--brd);border-radius:6px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;min-height:140px">
-              <label style="display:flex;align-items:center;gap:7px;font-size:11px;cursor:pointer;color:var(--txt2);white-space:nowrap;padding:2px 0">
-                <input type="checkbox" id="clr-tipo-all" value="all" onchange="clrTipoToggleAll(this)" style="flex-shrink:0"> Todos os tipos
-              </label>
-              <label style="display:flex;align-items:center;gap:7px;font-size:11px;cursor:pointer;color:var(--txt2);white-space:nowrap;padding:2px 0">
-                <input type="checkbox" class="clr-tipo-cb" value="dms" onchange="clrTipoChk(this)" style="flex-shrink:0"> 📋 DMS Transacional
-              </label>
-              <label style="display:flex;align-items:center;gap:7px;font-size:11px;cursor:pointer;color:var(--txt2);white-space:nowrap;padding:2px 0">
-                <input type="checkbox" class="clr-tipo-cb" value="dre" onchange="clrTipoChk(this)" style="flex-shrink:0"> 📈 DRE Gerencial
-              </label>
-              <label style="display:flex;align-items:center;gap:7px;font-size:11px;cursor:pointer;color:var(--txt2);white-space:nowrap;padding:2px 0">
-                <input type="checkbox" class="clr-tipo-cb" value="orca" onchange="clrTipoChk(this)" style="flex-shrink:0"> 📊 Orçamento/Metas
-              </label>
-              <label style="display:flex;align-items:center;gap:7px;font-size:11px;cursor:pointer;color:var(--txt2);white-space:nowrap;padding:2px 0">
-                <input type="checkbox" class="clr-tipo-cb" value="os" onchange="clrTipoChk(this)" style="flex-shrink:0"> 🔧 Por Tipo de OS
-              </label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;align-items:start">
+          <!-- Coluna 1: Tipo + Filial empilhados -->
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <!-- Tipo de arquivo -->
+            <div>
+              <div style="font-size:10px;color:var(--txt3);font-weight:600;margin-bottom:5px;letter-spacing:.04em">TIPO DE ARQUIVO</div>
+              <div id="clr-tipo-wrap" style="background:var(--card);border:1px solid var(--brd);border-radius:6px;padding:8px 10px;display:flex;flex-direction:column;gap:6px">
+                <label style="display:flex;align-items:center;gap:7px;font-size:11px;cursor:pointer;color:var(--txt2);white-space:nowrap;padding:2px 0">
+                  <input type="checkbox" id="clr-tipo-all" value="all" onchange="clrTipoToggleAll(this)" style="flex-shrink:0"> Todos os tipos
+                </label>
+                <label style="display:flex;align-items:center;gap:7px;font-size:11px;cursor:pointer;color:var(--txt2);white-space:nowrap;padding:2px 0">
+                  <input type="checkbox" class="clr-tipo-cb" value="dms" onchange="clrTipoChk(this)" style="flex-shrink:0"> 📋 DMS Transacional
+                </label>
+                <label style="display:flex;align-items:center;gap:7px;font-size:11px;cursor:pointer;color:var(--txt2);white-space:nowrap;padding:2px 0">
+                  <input type="checkbox" class="clr-tipo-cb" value="dre" onchange="clrTipoChk(this)" style="flex-shrink:0"> 📈 DRE Gerencial
+                </label>
+                <label style="display:flex;align-items:center;gap:7px;font-size:11px;cursor:pointer;color:var(--txt2);white-space:nowrap;padding:2px 0">
+                  <input type="checkbox" class="clr-tipo-cb" value="orca" onchange="clrTipoChk(this)" style="flex-shrink:0"> 📊 Orçamento/Metas
+                </label>
+                <label style="display:flex;align-items:center;gap:7px;font-size:11px;cursor:pointer;color:var(--txt2);white-space:nowrap;padding:2px 0">
+                  <input type="checkbox" class="clr-tipo-cb" value="os" onchange="clrTipoChk(this)" style="flex-shrink:0"> 🔧 Por Tipo de OS
+                </label>
+              </div>
+            </div>
+            <!-- Filial -->
+            <div>
+              <div style="font-size:10px;color:var(--txt3);font-weight:600;margin-bottom:5px;letter-spacing:.04em">FILIAL</div>
+              <select id="clr-fil" onchange="clrPreview()" style="width:100%;background:var(--card);border:1px solid var(--brd);border-radius:6px;padding:6px 8px;font-size:11px;color:var(--txt)">
+                <option value="">— Selecione —</option>
+                <option value="all">Todas as filiais</option>
+              </select>
             </div>
           </div>
-          <!-- Filial -->
-          <div>
-            <div style="font-size:10px;color:var(--txt3);font-weight:600;margin-bottom:5px;letter-spacing:.04em">FILIAL</div>
-            <select id="clr-fil" onchange="clrPreview()" style="width:100%;background:var(--card);border:1px solid var(--brd);border-radius:6px;padding:6px 8px;font-size:11px;color:var(--txt)">
-              <option value="">— Selecione —</option>
-              <option value="all">Todas as filiais</option>
-              <option value="Sorocaba">Sorocaba</option>
-              <option value="Itu">Itu</option>
-              <option value="Itapeva">Itapeva</option>
-              <option value="Alumínio">Alumínio</option>
-            </select>
-          </div>
-          <!-- Período -->
+          <!-- Coluna 2: Período -->
           <div>
             <div style="font-size:10px;color:var(--txt3);font-weight:600;margin-bottom:5px;letter-spacing:.04em">PERÍODO (opcional)</div>
-            <div style="display:flex;flex-direction:column;gap:4px">
-              <select id="clr-mes" onchange="clrPreview()" style="width:100%;background:var(--card);border:1px solid var(--brd);border-radius:6px;padding:6px 5px;font-size:11px;color:var(--txt)">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <select id="clr-mes" onchange="clrPreview()" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--brd);border-radius:6px;padding:6px 8px;font-size:11px;color:var(--txt)">
                 <option value="0">Todos meses</option>
                 <option value="1">Jan</option><option value="2">Fev</option>
                 <option value="3">Mar</option><option value="4">Abr</option>
@@ -2034,7 +2033,7 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
                 <option value="9">Set</option><option value="10">Out</option>
                 <option value="11">Nov</option><option value="12">Dez</option>
               </select>
-              <select id="clr-ano" onchange="clrPreview()" style="width:100%;background:var(--card);border:1px solid var(--brd);border-radius:6px;padding:6px 5px;font-size:11px;color:var(--txt)">
+              <select id="clr-ano" onchange="clrPreview()" style="width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--brd);border-radius:6px;padding:6px 8px;font-size:11px;color:var(--txt)">
                 <option value="0">Todos anos</option>
                 <option value="2024">2024</option>
                 <option value="2025">2025</option>
@@ -6999,11 +6998,58 @@ function parseFatOfText(text, env){
       inPecas=false; pecasDone=true; i++; continue;
     }
 
-    // Parse data row — must start with an OS code or "VB"
-    // OS code pattern: 2 digits or "VB" followed by description and numbers
-    const codM = tokens[0] && (tokens[0].match(/^\d{2}$/) || tokens[0]==='VB');
-    if(codM && tokens.length >= 4){
-      const cod  = tokens[0];
+    // Parse data row — must start with OS code (2 dígitos ou VB)
+    // PROBLEMA: PDF.js pode agrupar linha inteira como 1 token com espaço simples
+    // Ex: "07 C1P - SERV EXEC PROMOCAO 29 177.757,16 125.549,28..."
+    // Estratégia: testar a linha completa com regex antes de tentar tokens
+
+    // Normalizar confusão I↔1 no início da linha (fonte do PDF)
+    const lineNorm = line.replace(/^([Il])([Il\d])/, (m, a, b) =>
+      a.replace(/[Il]/g,'1') + b.replace(/[Il]/g,'1')
+    );
+
+    // Regex para linha completa: código | descrição | qtd | números...
+    // Aceita código de 2 dígitos ou VB, seguido de espaço e descrição, seguido de números
+    const lineRE = /^(\d{2}|VB)\s+(.+?)\s+(\d+)\s+([\d.,]+)\s+([\d.,]+)\s+(-?[\d.,]+)\s+(-?[\d.,]+)\s+([\d.,]+)\s+(-?[\d.,]+)\s+(-?[\d.,]+)\s*$/;
+    // Regex mais permissivo: código + descrição + pelo menos 4 números
+    const lineRE2 = /^(\d{2}|VB)\s+(.+?)\s+((?:\-?[\d.]+,\d{2}\s*){4,})/;
+
+    let codFinal='', descFinal='', qtdFinal=0, fatFinal=0, custoFinal=0, margRFinal=0, margPFinal=0;
+
+    const mFull = lineNorm.match(lineRE);
+    if(mFull){
+      codFinal  = mFull[1];
+      descFinal = mFull[2].trim();
+      qtdFinal  = pNum(mFull[3]);
+      fatFinal  = pNum(mFull[4]);
+      custoFinal= pNum(mFull[5]);
+      margRFinal= pNum(mFull[6]);
+    } else {
+      // Fallback: tokenize e usar estratégia numérica
+      const rawCod2 = tokens[0] || '';
+      const normCod2 = rawCod2.length === 2 ? rawCod2.replace(/[Il|]/g,'1') : rawCod2;
+      // Testar se linha começa com código válido (pode estar grudado)
+      const lineMatch = lineNorm.match(/^(\d{2}|VB)\s+/);
+      if(!lineMatch){ i++; continue; }
+      codFinal = lineMatch[1];
+
+      // Extrair todos os números da linha
+      const allNums = lineNorm.match(/-?[\d]+\.?[\d]*,[\d]{2}/g) || [];
+      if(allNums.length < 3){ i++; continue; }
+
+      // Descrição: entre o código e o primeiro número
+      const firstNumIdx = lineNorm.indexOf(allNums[0]);
+      descFinal = lineNorm.slice(lineMatch[0].length, firstNumIdx).trim();
+      // Remover QTD do início se for um número sem vírgula
+      const qtdMatch = descFinal.match(/\s+(\d+)\s*$/);
+      if(qtdMatch){ qtdFinal = parseInt(qtdMatch[1]); descFinal = descFinal.slice(0, -qtdMatch[0].length).trim(); }
+
+      fatFinal  = pNum(allNums[0]);
+      custoFinal= pNum(allNums[1]);
+      margRFinal= pNum(allNums[2]);
+    }
+
+    if(codFinal && (fatFinal > 0 || custoFinal > 0)){
       // Find numeric columns from the right
       // Format: cod | desc | qtd | fat | custo | margR | margP | impos | margLiqR | margLiqP
       // BUT description might contain spaces and be split across tokens
@@ -7014,18 +7060,18 @@ function parseFatOfText(text, env){
       }
       if(numStart<0){ i++; continue; }
       
-      const desc  = tokens.slice(1,numStart).join(' ');
-      const nums  = tokens.slice(numStart);
-      const qtd   = pNum(nums[0]);
-      const fat   = pNum(nums[1]);
-      const custo = pNum(nums[2]);
-      const margR = pNum(nums[3]);
-      const margP = pNum(nums[4]);
-      const impos = pNum(nums[5]);
-      const margLiqR = pNum(nums[6]);
-      const margLiqP = pNum(nums[7]);
-
-      if(fat<=0 && qtd<=0){ i++; continue; }
+      const desc  = descFinal;
+      const fat   = fatFinal;
+      const custo = custoFinal;
+      const margR = margRFinal;
+      // Tentar extrair margP, impos, margLiqR da linha
+      const allNums2 = lineNorm.match(/-?[\d]+\.?[\d]*,[\d]{2}/g) || [];
+      const margP    = pNum(allNums2[3]||'0');
+      const impos    = pNum(allNums2[4]||'0');
+      const margLiqR = pNum(allNums2[5]||'0');
+      const margLiqP = pNum(allNums2[6]||'0');
+      const qtd      = qtdFinal;
+      const cod      = codFinal;
 
       osRows.push({
         Env: env,
