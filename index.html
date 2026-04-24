@@ -3053,7 +3053,10 @@ async function loadState(){
     // Reparar OS rows com Ano=0 (arquivo sem campo Período no cabeçalho)
     // Tenta inferir o ano do periodoStr gravado ou usa o ano mais recente disponível
     ['mb','mc'].forEach(env=>{
-      const maxAno = Math.max(...(DB[env].map(r=>r.Ano||0).filter(a=>a>0)), new Date().getFullYear());
+      const anos = DB[env].map(r=>r.Ano||0).filter(a=>a>0);
+      const maxAno = anos.length > 0
+        ? anos.reduce((mx,a)=>a>mx?a:mx, 0)
+        : new Date().getFullYear();
       DB[env].forEach(r=>{
         if(r._fonte==='os' && (!r.Ano || r.Ano===0)){
           r.Ano = maxAno;
@@ -3561,6 +3564,12 @@ function goTab(env,tab,btn){
     // Use single requestAnimationFrame — avoids the 30ms race condition
     requestAnimationFrame(()=>{ initEstFilters(env); renderEstoque(env); });
   } else if(tab==='fat' && env==='mb'){
+    // Renderizar segmento imediatamente se já há dados (não esperar renderAll)
+    const rowsImediato = _lastAllRows[env] || getRowsNoAno(env);
+    if(rowsImediato.length > 0){
+      const subAtual = _fatSubCur[env]||'seg';
+      if(subAtual==='seg') renderTblSeg(rowsImediato, env);
+    }
     setTimeout(()=>{ renderAll(env); renderTblOS(getRowsOS('mb'),'mb'); }, 40);
   } else if(tab==='cli'){
     setTimeout(()=>renderClientes(env), 40);
@@ -6336,7 +6345,8 @@ function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
   syncOSFromFile(DB[env]);
   syncSegmentos(DB[env]);
   // Reparar OS rows com Ano=0
-  const _maxAno = Math.max(...DB[env].map(r=>r.Ano||0).filter(a=>a>0), new Date().getFullYear());
+  const _anosArr = DB[env].map(r=>r.Ano||0).filter(a=>a>0);
+  const _maxAno = _anosArr.length > 0 ? _anosArr.reduce((mx,a)=>a>mx?a:mx,0) : new Date().getFullYear();
   DB[env].forEach(r=>{ if(r._fonte==='os' && (!r.Ano||r.Ano===0)) r.Ano=_maxAno; });
   initAnoChips(env); initFilialChips(env);
   renderMetaTable();
