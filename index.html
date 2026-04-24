@@ -6451,10 +6451,25 @@ function resolveDREConflict(escolha){
     setTimeout(()=>{
       renderAll(env);
       if(SHEETS_CONFIG && SHEETS_CONFIG.enabled){
-        limparDoSheets('vendas', env)
-          .then(()=> enviarParaSheets('vendas', env, DB[env], 'append'))
-          .then(() => mostrarToastSync('✅ DRE sincronizado com Sheets', 'success'))
-          .catch(err => console.warn('⚠️ Sheets sync erro:', err));
+        // 🚀 OTIMIZADO: delete granular (só DRE antigo) + append só dos 208 novos
+        // Sem reenviar os 180k do DB inteiro!
+        (async()=>{
+          try{
+            // 1. Remover DRE antigo das filiais/anos afetados (granular)
+            for(const fil of [...filaisNovas]){
+              for(const ano of dreAnos){
+                await limparDoSheets('vendas', env, {filial:fil, ano, fonte:'dre'});
+                console.log(`🗑️ DRE antigo removido: ${fil} ${ano}`);
+              }
+            }
+            // 2. Enviar só os registros DRE novos (208 reg, não 180k)
+            await enviarParaSheets('vendas', env, parsed, 'append');
+            console.log(`✅ DRE enviado: ${parsed.length} registros (sem reenviar DB inteiro)`);
+            mostrarToastSync('✅ DRE sincronizado com Sheets', 'success');
+          }catch(err){
+            console.warn('⚠️ Sheets sync erro:', err);
+          }
+        })();
       }
       setTimeout(closeUp, 1000);
     }, 100);
