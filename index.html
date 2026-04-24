@@ -2024,8 +2024,8 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
           <!-- Período -->
           <div>
             <div style="font-size:10px;color:var(--txt3);font-weight:600;margin-bottom:5px;letter-spacing:.04em">PERÍODO (opcional)</div>
-            <div style="display:flex;gap:4px">
-              <select id="clr-mes" onchange="clrPreview()" style="flex:1;background:var(--card);border:1px solid var(--brd);border-radius:6px;padding:6px 5px;font-size:11px;color:var(--txt)">
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <select id="clr-mes" onchange="clrPreview()" style="width:100%;background:var(--card);border:1px solid var(--brd);border-radius:6px;padding:6px 5px;font-size:11px;color:var(--txt)">
                 <option value="0">Todos meses</option>
                 <option value="1">Jan</option><option value="2">Fev</option>
                 <option value="3">Mar</option><option value="4">Abr</option>
@@ -2034,7 +2034,7 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
                 <option value="9">Set</option><option value="10">Out</option>
                 <option value="11">Nov</option><option value="12">Dez</option>
               </select>
-              <select id="clr-ano" onchange="clrPreview()" style="flex:1;background:var(--card);border:1px solid var(--brd);border-radius:6px;padding:6px 5px;font-size:11px;color:var(--txt)">
+              <select id="clr-ano" onchange="clrPreview()" style="width:100%;background:var(--card);border:1px solid var(--brd);border-radius:6px;padding:6px 5px;font-size:11px;color:var(--txt)">
                 <option value="0">Todos anos</option>
                 <option value="2024">2024</option>
                 <option value="2025">2025</option>
@@ -7258,22 +7258,19 @@ function parseDRESheetNovo(sh, env){
   const filialNome = mapFilial(filialRaw) || filialRaw || 'Desconhecida';
 
   // ── Extrator de valor numérico de uma célula ──────────────────────────
+  // raw:false: fórmulas retornam valor calculado (number), mas pode vir
+  // como string formatada "1.234.567,89" (BR) em algumas versões do SheetJS
   const numVal = raw => {
     if(typeof raw === 'number') return isFinite(raw) ? raw : 0;
     const s = String(raw||'').trim();
     if(!s) return 0;
-    // Lidar com fórmulas simples tipo =A+B (ex: =345772.04+38.39)
-    if(s.startsWith('=')){
-      try{
-        // Extrair expressão numérica simples: só +, -, *, / e números
-        const expr = s.slice(1).replace(/[^0-9+\-*.\/]/g,'');
-        // eslint-disable-next-line no-new-func
-        const result = Function('"use strict";return ('+expr+')')();
-        return isFinite(result) ? result : 0;
-      }catch{ return 0; }
-    }
-    const v = parseFloat(s.replace(/,/g,'.').replace(/[^0-9.\-]/g,''));
-    return isNaN(v) ? 0 : v;
+    // Parse direto (número EN padrão)
+    const direct = parseFloat(s);
+    if(!isNaN(direct)) return direct;
+    // Formato BR: "1.234.567,89"
+    const br = parseFloat(s.replace(/\./g,'').replace(',','.'));
+    if(!isNaN(br)) return br;
+    return 0;
   };
 
   // ── Leitura por índice de linha fixo (0-based após header) ────────────
@@ -7828,7 +7825,7 @@ function pFile(file){
         filaisNovas = new Set(parsed.map(r=>r.Filial));
 
       } else {
-        const wb=XLSX.read(ev.target.result,{type:'binary', cellDates:false, cellFormula:false, raw:false});
+        const wb=XLSX.read(ev.target.result,{type:'binary', cellDates:false});
 
         if(isOSFile(wb)){
           // ── Arquivo Por Tipo de OS ──
