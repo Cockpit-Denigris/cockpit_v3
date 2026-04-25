@@ -841,7 +841,7 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
     <button class="ibtn" onclick="exportHTMLSnapshot()" id="btn-html-snap" title="Gerar HTML snapshot" style="color:var(--grn);border-color:color-mix(in srgb,var(--grn) 30%,transparent)">📤 HTML</button>
     <button class="ibtn" onclick="importData()" id="btn-import" title="Importar dados" style="color:var(--acc);border-color:color-mix(in srgb,var(--acc) 30%,transparent)">⬆ Importar</button>
     <div style="width:1px;height:18px;background:var(--brd);flex-shrink:0;margin:0 2px"></div>
-    <button class="ibtn" onclick="openGSConfig()" id="btn-gs-config" title="Google Sheets" style="color:#34a853;border-color:#34a85344">🔗 Sheets</button>
+    <button class="ibtn" onclick="forcarEnvioSheets()" id="btn-gs-config" title="Enviar dados locais para o Google Sheets" style="color:#34a853;border-color:#34a85344">⬆ Enviar Sheets</button>
     <button class="ibtn" onclick="_sincronizarTudoDoSheets()" id="btn-gs-refresh" title="Sincronizar do Google Sheets" style="color:#4285f4;border-color:#4285f444">🔄 Sync</button>
     <div style="width:1px;height:18px;background:var(--brd);flex-shrink:0;margin:0 2px"></div>
     <button class="ibtn" onclick="openDataStatus(CURENV)" id="btn-status">📋 Status</button>
@@ -3905,8 +3905,8 @@ function getRowsOS(env){
     // Mês_Num=0 significa arquivo anual (todos os meses) — sempre passa
     if(r.Mês_Num !== 0 && !(F[env].mes.has('all')||F[env].mes.has(String(r.Mês_Num)))) return false;
     // Filtro de canal para Tipo OS
-    if(canalFiltrado==='Telepeças/Balcão' && r.Tipo_OS!=='VB') return false;
-    if(canalFiltrado==='Oficina/Funilaria' && r.Tipo_OS==='VB') return false;
+    if(canalFiltrado==='Telepeças/Balcão' && String(r.Tipo_OS)!=='VB') return false;
+    if(canalFiltrado==='Oficina/Funilaria' && String(r.Tipo_OS)==='VB') return false;
     return true;
   });
 }
@@ -4998,8 +4998,12 @@ function toggleOs(el,t){
 function syncOsTypes(rows){
   let changed=false;
   rows.forEach(r=>{
-    const t = r.Tipo_OS;
-    if(t && typeof t === 'string' && t !== '—' && t.trim() !== '' && !TIPOS_OS_LIST.includes(t)){
+    // Converter para string — ao vir do Sheets, códigos numéricos chegam como number
+    const t = r.Tipo_OS != null ? String(r.Tipo_OS).trim() : '';
+    if(!t || t === '—') return;
+    // Normalizar o campo no registro também
+    if(typeof r.Tipo_OS !== 'string') r.Tipo_OS = t;
+    if(!TIPOS_OS_LIST.includes(t)){
       TIPOS_OS_LIST.push(t);
       F.mb.osFilter.add(t);
       changed=true;
@@ -5045,6 +5049,9 @@ function renderTblOS(rows, _env){
     _rowsAno0.forEach(r=>{ r.Ano=_maxA; });
     saveState();
   }
+
+  // Normalizar Tipo_OS para string (vindo do Sheets pode ser number)
+  rowsOS.forEach(r=>{ if(r.Tipo_OS != null) r.Tipo_OS = String(r.Tipo_OS).trim(); });
 
   // Coletar todos os tipos presentes nos dados OS filtrados
   const tiposPresentes=[...new Set(rowsOS.map(r=>r.Tipo_OS))].sort();
@@ -8784,6 +8791,45 @@ function appInit(){
     ['mb','mc'].forEach(env=>{ renderAll(env); renderStatusStrip(env); });
   }
   // ══════════════════════════════════════════════════════════════
+}
+
+async function forcarEnvioSheets(){
+  if(!SHEETS_CONFIG || !SHEETS_CONFIG.enabled){
+    alert('Google Sheets não configurado. Configure primeiro em ⚙️.');
+    return;
+  }
+  const total = DB.mb.length + DB.mc.length;
+  if(total === 0){
+    alert('Nenhum dado local para enviar.');
+    return;
+  }
+  if(!confirm(`Enviar ${total.toLocaleString('pt-BR')} registros para o Google Sheets?\n\nIsso vai substituir todos os dados existentes no Sheets.`)) return;
+
+  mostrarToastSync('⬆ Enviando dados para o Sheets...', 'info');
+  console.group('⬆ forcarEnvioSheets — início');
+  try{
+    // MB
+    if(DB.mb.length > 0){
+      console.log(`📤 Limpando e reenviando MB: ${DB.mb.length} registros`);
+      await limparDoSheets('vendas','mb');
+      await enviarParaSheets('vendas','mb', DB.mb, 'append');
+      console.log('✅ MB enviado');
+    }
+    // MC
+    if(DB.mc.length > 0){
+      console.log(`📤 Limpando e reenviando MC: ${DB.mc.length} registros`);
+      await limparDoSheets('vendas','mc');
+      await enviarParaSheets('vendas','mc', DB.mc, 'append');
+      console.log('✅ MC enviado');
+    }
+    console.log('✅ Envio concluído!');
+    console.groupEnd();
+    mostrarToastSync('✅ Dados enviados para o Google Sheets!', 'success');
+  }catch(err){
+    console.error('❌ Erro ao enviar:', err);
+    console.groupEnd();
+    mostrarToastSync('⚠️ Erro ao enviar para o Sheets', 'warning');
+  }
 }
 
 async function _sincronizarTudoDoSheets(){
