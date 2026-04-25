@@ -5165,10 +5165,12 @@ function renderTblSeg(rows, _env){
 
   // Segmentos presentes nos dados filtrados (não usar SEGMENTOS fixo)
   const segsNoDado=[...new Set(rowsSeg.map(r=>r.Segmento))].sort();
-  // Filtrar pelos selecionados no sidebar
-  const segs=segsNoDado.filter(s=>F[env].seg && F[env].seg.has(s));
+  // Filtrar pelos selecionados no sidebar — se vazio/não inicializado, mostrar todos
+  const segs = (F[env].seg && F[env].seg.size > 0)
+    ? segsNoDado.filter(s=>F[env].seg.has(s))
+    : segsNoDado;
 
-  if(!F[env].segAnos) F[env].segAnos=new Set([String(CY)]);
+  if(!F[env].segAnos || !F[env].segAnos.size) F[env].segAnos=new Set(ANOS_LIST.map(String));
   const selectedAnos=[...F[env].segAnos].sort();
 
   if(!rowsSeg.length){wrap.innerHTML='<div class="empty-box">Nenhum dado de segmento disponível.<br><span style="font-size:10px;color:var(--txt3)">Carregue o arquivo DMS transacional (VendaPecaAcesPneu) para ver segmentos.</span></div>';return;}
@@ -8746,10 +8748,23 @@ function appInit(){
   if(hint && !hasAny){ hint.style.display='block'; }
 
   // ═══ DADOS: carrega do IndexedDB/localStorage (principal) ══════
-  // Se não tem dados locais → buscar do Sheets automaticamente
-  if(!hasAny && SHEETS_CONFIG && SHEETS_CONFIG.enabled){
-    console.log('📡 Sem dados locais — buscando do Google Sheets...');
-    _sincronizarTudoDoSheets();
+  // SEMPRE buscar do Sheets ao abrir — garante que todos os dispositivos
+  // vejam os dados mais recentes. Dados locais ficam visíveis enquanto carrega.
+  if(SHEETS_CONFIG && SHEETS_CONFIG.enabled){
+    if(!hasAny){
+      // Sem dados locais → loading screen completo
+      console.log('📡 Sem dados locais — buscando do Google Sheets...');
+      _sincronizarTudoDoSheets();
+    } else {
+      // Com dados locais → renderiza imediatamente com o que tem
+      // e atualiza silenciosamente do Sheets em background
+      console.log('🔄 Dados locais carregados — atualizando do Sheets em background...');
+      ['mb','mc'].forEach(env=>{ renderAll(env); renderStatusStrip(env); });
+      // Pequeno delay para não travar a UI no carregamento
+      setTimeout(()=> _sincronizarTudoDoSheets(), 1500);
+    }
+  } else if(hasAny) {
+    ['mb','mc'].forEach(env=>{ renderAll(env); renderStatusStrip(env); });
   }
   // ══════════════════════════════════════════════════════════════
 }
