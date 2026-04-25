@@ -4515,14 +4515,18 @@ function renderCmp(env,allRows){
     fill:true,borderWidth:2.5,pointRadius:4,tension:.4,
     datalabels:{
       color:LCOLORS[ai%LCOLORS.length],
-      font:{family:'JetBrains Mono',size:isPct?10:9,weight:'700'},
+      font:{family:'JetBrains Mono',size:9,weight:'700'},
       formatter:v=>(v!=null&&v!==0)?fmtCmp(key,v):'',
+      // Alternar acima/abaixo por ano para evitar sobreposição
       align: ai%2===0 ? 'top' : 'bottom',
-      anchor:'end',
-      offset: 4,
-      padding:{top:2,bottom:2,left:3,right:3},
-      backgroundColor: isDark()?'rgba(10,13,26,.65)':'rgba(220,230,245,.85)',
-      borderRadius:3
+      anchor: ai%2===0 ? 'end' : 'start',
+      offset: 6,
+      // Sem fundo — só o texto colorido da série
+      backgroundColor: 'transparent',
+      borderRadius:0,
+      padding:0,
+      // Clamp para não sair do gráfico
+      clamp: true,
     }
   }));
 
