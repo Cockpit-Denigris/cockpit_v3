@@ -170,7 +170,7 @@ body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;font
 .cmp-b:hover{color:var(--txt);}
 .cmp-b.on{background:var(--acc);color:var(--bg);}
 
-/* Est filterbar — sticky offset accounts for navbar + filter (agora auto height) */
+/* Est filterbar — top calculado dinamicamente via JS (ver ajustarOffsetEstoque) */
 .filterbar.fb-est{
   top:calc(var(--navbar-h) + 80px);
   z-index:480;
@@ -178,7 +178,7 @@ body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;font
 /* est subnav offset */
 .est-subnav-bar{
   padding:0 16px;background:var(--surf);border-bottom:1px solid var(--brd);
-  position:sticky;top:calc(var(--navbar-h) + 80px + var(--filter-h));
+  position:sticky;top:calc(var(--navbar-h) + 160px);
   z-index:470;flex-wrap:nowrap;overflow-x:auto;
 }
 
@@ -3561,8 +3561,18 @@ function goTab(env,tab,btn){
 
   // Render content
   if(tab==='est'){
-    // Use single requestAnimationFrame — avoids the 30ms race condition
-    requestAnimationFrame(()=>{ initEstFilters(env); renderEstoque(env); });
+    // Calcular offset correto para o fb-est baseado na altura real do filterbar principal
+    requestAnimationFrame(()=>{
+      const fbMain = document.getElementById('fb-mb') || document.getElementById('fb-mc');
+      const navbar = document.querySelector('.navbar');
+      const navH = navbar ? navbar.offsetHeight : 48;
+      const fbH  = fbMain ? fbMain.offsetHeight : 80;
+      const fbEst = document.getElementById(`fb-est-${env}`);
+      const snEst = document.querySelector('.est-subnav-bar');
+      if(fbEst){ fbEst.style.top = (navH + fbH) + 'px'; }
+      if(snEst){ snEst.style.top = (navH + fbH + (fbEst ? fbEst.offsetHeight : 80)) + 'px'; }
+      initEstFilters(env); renderEstoque(env);
+    });
   } else if(tab==='fat' && env==='mb'){
     // Renderizar segmento imediatamente se já há dados (não esperar renderAll)
     const rowsImediato = _lastAllRows[env] || getRowsNoAno(env);
@@ -4223,13 +4233,15 @@ function renderPxR(env,rows){
       color:chartLbl(.55),
       font:{family:'JetBrains Mono',size:10,weight:'700'},
       formatter:v=>v>0?fRFull(v):'',
-      anchor:'end',align:'top',offset:2
+      anchor:'end',align:'top',offset:6,
+      padding:{top:2,bottom:2,left:3,right:3}
     }
   });
   datasets.push({
     label:'Realizado',data:real,backgroundColor:acol+'cc',borderRadius:4,
-    datalabels:{color:lblColor,font:{family:'JetBrains Mono',size:9,weight:'600'},
-      formatter:v=>v>0?fRFull(v):'',anchor:'end',align:'top',offset:2}
+    datalabels:{color:lblColor,font:{family:'JetBrains Mono',size:10,weight:'700'},
+      formatter:v=>v>0?fRFull(v):'',anchor:'end',align:'top',offset:6,
+      padding:{top:2,bottom:2,left:3,right:3}}
   });
   mkCh('c-'+env+'-pxr',{type:'bar',data:{labels:lbl,datasets},options:{...baseOpts(),plugins:{...baseOpts().plugins,datalabels:{display:true}}}});
   // detail
@@ -4494,7 +4506,8 @@ function renderCmp(env,allRows){
     });
   });
 
-  const LABEL_ALIGNS=['top','bottom','left','right'];
+  const LABEL_ALIGNS=['top','bottom','top','bottom'];
+  const LABEL_OFFSETS=[8, 8, 8, 8];
   const ds=anos.map((ano,ai)=>({
     label:String(ano),
     data:ms.map(m=>valByAnoMes[ano][m]),
@@ -4504,9 +4517,9 @@ function renderCmp(env,allRows){
       color:LCOLORS[ai%LCOLORS.length],
       font:{family:'JetBrains Mono',size:isPct?10:9,weight:'700'},
       formatter:v=>(v!=null&&v!==0)?fmtCmp(key,v):'',
-      align: LABEL_ALIGNS[ai%LABEL_ALIGNS.length],
-      anchor:'center',
-      offset: 6 + ai*18,
+      align: ai%2===0 ? 'top' : 'bottom',
+      anchor:'end',
+      offset: 4,
       padding:{top:2,bottom:2,left:3,right:3},
       backgroundColor: isDark()?'rgba(10,13,26,.65)':'rgba(220,230,245,.85)',
       borderRadius:3
@@ -8809,10 +8822,12 @@ async function _sincronizarTudoDoSheets(){
       [...new Set(DB.mb.map(r=>+r.Ano))].forEach(a=>{ if(!ANOS_LIST.includes(a)) ANOS_LIST.push(a); });
       ANOS_LIST.sort((a,b)=>a-b);
       initAnoChips('mb'); initFilialChips('mb');
+      initOsChecks();
       renderStatusStrip('mb');
       renderAll('mb');
+      renderTblOS(getRowsOS('mb'), 'mb');
       const filsMB=[...new Set(DB.mb.map(r=>r.Filial))].sort();
-      console.log(`✅ Vendas MB: ${DB.mb.length} registros | Filiais: ${filsMB.join(', ')}`);
+      console.log(`✅ Vendas MB: ${DB.mb.length} registros | Filiais: ${filsMB.join(', ')} | OS: ${DB.mb.filter(r=>r._fonte==='os').length}`);
     } else {
       console.warn('⚠️ Vendas MB: sem dados no Sheets');
       setLoad(35, '⚠️ MB: sem dados no Sheets');
