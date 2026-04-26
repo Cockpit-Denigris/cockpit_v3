@@ -2443,7 +2443,8 @@ function _detectFilialCidade(empresa, cidadeNorm){
   // 1) Pelo campo empresa
   if(emp.includes('ITAPEVA')) return 'Itapeva';
   if(emp.includes('ALUMIN'))  return 'Alumínio';
-  if(emp.includes('SOROCABA') || emp.includes('MATRIZ')) return 'Sorocaba';
+  if(emp.includes('SOROCABA')) return 'Sorocaba';
+  if(emp.includes('LIMAO') || emp.includes('LIMÃO') || emp.includes('MATRIZ')) return 'Limão';
   if(emp.includes('ITU') && !emp.includes('ITAPEVA') && !emp.includes('ALUMIN')) return 'Itu';
   // 2) Fallback: checar no CIDADE_BASE se a cidade já tem filial definida
   const baseEntry = CIDADE_BASE.find(([c])=>c===cidadeNorm);
@@ -4513,24 +4514,10 @@ function renderCmp(env,allRows){
     data:ms.map(m=>valByAnoMes[ano][m]),
     borderColor:LCOLORS[ai%LCOLORS.length],backgroundColor:LCOLORS[ai%LCOLORS.length]+'18',
     fill:true,borderWidth:2.5,pointRadius:4,tension:.4,
-    datalabels:{
-      color:LCOLORS[ai%LCOLORS.length],
-      font:{family:'JetBrains Mono',size:9,weight:'700'},
-      formatter:v=>(v!=null&&v!==0)?fmtCmp(key,v):'',
-      // Alternar acima/abaixo por ano para evitar sobreposição
-      align: ai%2===0 ? 'top' : 'bottom',
-      anchor: ai%2===0 ? 'end' : 'start',
-      offset: 6,
-      // Sem fundo — só o texto colorido da série
-      backgroundColor: 'transparent',
-      borderRadius:0,
-      padding:0,
-      // Clamp para não sair do gráfico
-      clamp: true,
-    }
+    datalabels:{ display:false }
   }));
 
-  const chartOpts={...baseOpts(),plugins:{...baseOpts().plugins,datalabels:{display:true}}};
+  const chartOpts={...baseOpts(),plugins:{...baseOpts().plugins,datalabels:{display:false}}};
   if(isPct){
     chartOpts.scales={y:{ticks:{callback:v=>v.toFixed(1)+'%',color:chartLbl(.6),font:{size:10}},grid:{color:chartGrid()},border:{display:false}},
       x:{ticks:{color:chartLbl(.6),font:{size:10}},grid:{display:false},border:{display:false}}};
@@ -6695,18 +6682,22 @@ function mapCanal(depto){
 // Mapeamento Filial DMS → nome no dashboard
 // Mapeamento fixo das 4 unidades do grupo De Nigris
 const FILIAL_MAP=[
-  {keys:['ITAPEVA'],                                              nome:'Itapeva'},
-  {keys:['ALUMINIO','ALUMÍNIO','ALUM','ALUMINÍO','ALUMINI'],      nome:'Alumínio'},
-  {keys:['SOROCABA','MATRIZ'],                                    nome:'Sorocaba'},
-  {keys:['ITU'],                                                  nome:'Itu'},
-  // DN SJC
-  {keys:['SJC','SAO JOSE','SÃO JOSÉ','SJCAMPOS','S.J.'],         nome:'DN SJC'},
-  // Novas filiais (auto-detect)
-  {keys:['ROSEIRA'],                                              nome:'Roseira'},
-  {keys:['SBC','BERNARDO','S.B.C'],                               nome:'SBC'},
-  {keys:['DEMARCHI'],                                             nome:'Demarchi'},
-  {keys:['LIMAO','LIMÃO'],                                        nome:'Limão'},
-  {keys:['GUARULHOS','GRU'],                                      nome:'Guarulhos'},
+  // CNPJ 61.591.459 — sufixo → filial
+  {keys:['ITAPEVA','0007'],                                       nome:'Itapeva'},
+  {keys:['ALUMINIO','ALUMÍNIO','ALUM','ALUMINÍO','ALUMINI','0009','CBA'], nome:'Alumínio'},
+  {keys:['SOROCABA','0006'],                                      nome:'Sorocaba'},
+  {keys:['ITU','0005'],                                           nome:'Itu'},
+  // DN SJC — CNPJ 61.591.459/0002
+  {keys:['SJC','SAO JOSE','SÃO JOSÉ','SJCAMPOS','S.J.','0002'],  nome:'DN SJC'},
+  // Roseira — CNPJ 61.591.459/0010
+  {keys:['ROSEIRA','0010'],                                       nome:'Roseira'},
+  // CNPJ 62.262.175 — SBC e Demarchi
+  {keys:['SBC','BERNARDO','S.B.C','62.262.175/0004','0004-77'],   nome:'SBC'},
+  {keys:['DEMARCHI','62.262.175/0002','0002-05'],                 nome:'Demarchi'},
+  // Limão (Matriz) — CNPJ 61.591.459/0001
+  {keys:['LIMAO','LIMÃO','0001','MATRIZ'],                        nome:'Limão'},
+  // Guarulhos — CNPJ 61.591.459/0004
+  {keys:['GUARULHOS','GRU','61.591.459/0004'],                    nome:'Guarulhos'},
 ];
 function mapFilial(filialDMS){
   const f=String(filialDMS||'').toUpperCase().trim();
@@ -8339,8 +8330,9 @@ const ROLE_LABELS = {
 const DEFAULT_ADMIN = { id:'__admin__', nome:'Administrador', login:'admin', senha:'admin123', role:'admin', filiais:[], modulos:[] };
 
 const BUILTIN_USERS = [
-  { id:'__fabio__',   nome:'Fabio Freitas', login:'afabio.freitas', senha:'Mudar123', role:'full', filiais:[], modulos:[] },
-  { id:'__giovane__', nome:'Giovane Silva', login:'giovane.silva',  senha:'Mudar123', role:'full', filiais:[], modulos:[] },
+  { id:'__fabio__',   nome:'Fabio Freitas', login:'afabio.freitas', senha:'Mudar123', role:'full',    filiais:[], modulos:[] },
+  { id:'__giovane__', nome:'Giovane Silva', login:'giovane.silva',  senha:'Mudar123', role:'full',    filiais:[], modulos:[] },
+  { id:'__consulta__',nome:'Consulta',      login:'consulta',       senha:'Mudar123', role:'consult', filiais:[], modulos:[], primeiroAcesso:true },
 ];
 
 function authGetUsers(){
@@ -8419,6 +8411,14 @@ function doLogout(){
 
 function authEnter(){
   document.getElementById('authScreen').style.display='none';
+
+  // ── Primeiro acesso: forçar troca de senha ──────────────────────
+  if(_currentUser && _currentUser.primeiroAcesso){
+    _forcarTrocaSenha(_currentUser);
+    return;
+  }
+  // ────────────────────────────────────────────────────────────────
+
   authApplyPermissions();
   appInit();
   // Show home or go direct if single env access
@@ -8429,6 +8429,74 @@ function authEnter(){
   document.getElementById('home-card-mb').style.display=canMB?'':'none';
   document.getElementById('home-card-mc').style.display=canMC?'':'none';
   // Show user info on home
+  const inf=document.getElementById('home-user-info');
+  if(inf) inf.innerHTML=`Olá, <strong style="color:var(--txt)">${u.nome}</strong> &nbsp;·&nbsp; <span class="role-badge ${ROLE_LABELS[u.role].cls}">${ROLE_LABELS[u.role].icon} ${ROLE_LABELS[u.role].lbl}</span>`;
+  document.getElementById('home-logout-btn').style.display='';
+  document.getElementById('homeScreen').style.display='flex';
+}
+
+// ── Troca obrigatória de senha no primeiro acesso ──────────────
+function _forcarTrocaSenha(u){
+  // Criar overlay dedicado (sem acessar o app)
+  const ov=document.createElement('div');
+  ov.id='first-access-ov';
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:var(--bg);display:flex;align-items:center;justify-content:center;';
+  ov.innerHTML=`
+    <div style="background:var(--card);border:1px solid var(--brd);border-radius:18px;width:420px;max-width:96vw;padding:32px;box-shadow:var(--shd)">
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:4px">🔑 Primeiro Acesso</div>
+      <div style="font-size:12px;color:var(--txt3);margin-bottom:24px">Olá, <strong style="color:var(--txt)">${u.nome}</strong>! Por segurança, defina uma nova senha antes de continuar.</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div>
+          <label style="font-size:11px;color:var(--txt3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Nova Senha</label>
+          <input type="password" id="fa-nova" placeholder="mínimo 6 caracteres"
+            style="width:100%;background:var(--card2);border:1px solid var(--brd);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--txt);outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--txt3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Confirmar Nova Senha</label>
+          <input type="password" id="fa-conf" placeholder="repita a nova senha"
+            onkeydown="if(event.key==='Enter')_confirmarPrimeiraSenha()"
+            style="width:100%;background:var(--card2);border:1px solid var(--brd);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--txt);outline:none;box-sizing:border-box">
+        </div>
+      </div>
+      <div id="fa-msg" style="font-size:12px;min-height:18px;margin-top:10px;color:var(--red)"></div>
+      <button onclick="_confirmarPrimeiraSenha()"
+        style="margin-top:16px;width:100%;padding:11px;background:var(--mb);color:#fff;border:none;border-radius:8px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer">
+        ✓ Definir Senha e Entrar
+      </button>
+    </div>`;
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const el=document.getElementById('fa-nova'); if(el) el.focus(); },100);
+}
+
+function _confirmarPrimeiraSenha(){
+  const nova=(document.getElementById('fa-nova')||{}).value||'';
+  const conf=(document.getElementById('fa-conf')||{}).value||'';
+  const msg=document.getElementById('fa-msg');
+  if(!nova||nova.length<6){ if(msg) msg.textContent='A senha deve ter no mínimo 6 caracteres.'; return; }
+  if(nova!==conf){ if(msg) msg.textContent='As senhas não coincidem.'; return; }
+  if(nova==='Mudar123'||nova==='admin123'){ if(msg) msg.textContent='Escolha uma senha diferente da senha padrão.'; return; }
+
+  // Salvar nova senha e remover flag primeiroAcesso
+  const todos=authGetAll();
+  const idx=todos.findIndex(x=>x.id===_currentUser.id);
+  if(idx>=0){
+    todos[idx].senha=nova;
+    delete todos[idx].primeiroAcesso;
+    _currentUser=todos[idx];
+    // Salvar apenas usuários não-builtin + atualizações de builtins
+    authSaveUsers(todos.filter(u=>u.id!=='__admin__'));
+  }
+
+  // Remover overlay e prosseguir
+  const ov=document.getElementById('first-access-ov');
+  if(ov) ov.remove();
+  authApplyPermissions();
+  appInit();
+  const u=_currentUser;
+  const canMB=authCan('env','mb');
+  const canMC=authCan('env','mc');
+  document.getElementById('home-card-mb').style.display=canMB?'':'none';
+  document.getElementById('home-card-mc').style.display=canMC?'':'none';
   const inf=document.getElementById('home-user-info');
   if(inf) inf.innerHTML=`Olá, <strong style="color:var(--txt)">${u.nome}</strong> &nbsp;·&nbsp; <span class="role-badge ${ROLE_LABELS[u.role].cls}">${ROLE_LABELS[u.role].icon} ${ROLE_LABELS[u.role].lbl}</span>`;
   document.getElementById('home-logout-btn').style.display='';
