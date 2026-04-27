@@ -1090,7 +1090,6 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
     <div class="tab-page" id="mb-cli" style="display:none"><!-- legacy stub --></div>
     <div class="tab-page" id="mb-est">
       <!-- STATUS STRIP (reaproveitado da aba fat, reposicionado via JS) -->
-      <div id="status-strip-placeholder-mb"></div>
       <!-- FILTERBAR EST (hidden until goTab activates) -->
       <div class="filterbar fb-est" id="fb-est-mb" style="display:none">
         <!-- Linha 1: Núcleos + Filial -->
@@ -1551,7 +1550,6 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
       <div class="chip" onclick="fToggle('mc',this,'mes','11')">Nov</div><div class="chip" onclick="fToggle('mc',this,'mes','12')">Dez</div>
     </div>
   </div>
-  <div id="status-strip-placeholder-mc"></div>
   <div class="filterbar fb-est" id="fb-est-mc" style="display:none">
     <!-- Linha 1: Núcleos + Filial -->
     <span class="flbl">Núcleos</span>
@@ -3637,30 +3635,29 @@ function goTab(env,tab,btn){
   // Est filterbar — show immediately before rendering (prevents display:none from blocking chip init)
   if(fbEst) fbEst.style.display = tab==='est' ? 'flex' : 'none';
   if(snEst) snEst.style.display = tab==='est' ? 'flex' : 'none';
-  // Status strip — na aba estoque vai para dentro do conteúdo (abaixo dos filtros)
-  if(strip && strip._hasData){
-    strip.style.display = 'flex';
-    if(tab === 'est'){
-      // Mover strip para dentro do est (abaixo do filterbar)
-      const placeholder = document.getElementById(`status-strip-placeholder-${env}`);
-      if(placeholder && strip.parentNode !== placeholder.parentNode){
-        placeholder.parentNode.insertBefore(strip, placeholder.nextSibling);
-      }
-      strip.style.position = 'relative';
-      strip.style.top = 'auto';
-      strip.style.zIndex = '1';
-      strip.style.marginTop = '8px';
-    } else {
-      // Devolver strip para posição original (antes do conteúdo fat)
-      const fatPage = document.getElementById(`${env}-fat`);
-      if(fatPage && strip.parentNode !== fatPage.parentNode){
-        fatPage.parentNode.insertBefore(strip, fatPage);
-      }
-      strip.style.position = 'sticky';
-      strip.style.top = '';
-      strip.style.zIndex = '470';
-      strip.style.marginTop = '';
+  // Status strip — esconder na aba estoque (strip fica sticky só no faturamento)
+  // Na aba estoque, mostrar um strip inline separado dentro do conteúdo
+  if(strip){
+    strip.style.display = (tab === 'fat' && strip._hasData) ? 'flex' : 'none';
+  }
+  // Strip inline no estoque
+  let stripEst = document.getElementById(`status-strip-est-${env}`);
+  if(tab === 'est'){
+    if(!stripEst){
+      stripEst = document.createElement('div');
+      stripEst.id = `status-strip-est-${env}`;
+      stripEst.style.cssText = 'font-size:11px;gap:10px;flex-wrap:wrap;align-items:center;background:var(--card2);border:1px solid var(--brd);border-radius:8px;padding:8px 14px;margin:8px 16px 0;display:flex;';
+      const estPage = document.getElementById(`${env}-est`);
+      if(estPage) estPage.insertBefore(stripEst, estPage.firstChild);
     }
+    if(strip && strip._hasData){
+      stripEst.innerHTML = strip.innerHTML;
+      stripEst.style.display = 'flex';
+    } else {
+      stripEst.style.display = 'none';
+    }
+  } else {
+    if(stripEst) stripEst.style.display = 'none';
   }
   // Upload button
   if(upBtn) upBtn.style.display = tab==='fat' ? '' : 'none';
@@ -6237,6 +6234,12 @@ function renderStatusStrip(env){
   if(!db.length && !metas.length){ strip.style.display='none'; return; }
   strip.style.display='flex';
   strip.innerHTML=buildStatusInline(env);
+  strip._hasData=true;
+  // Atualizar strip inline do estoque se visível
+  const _stripEst = document.getElementById(`status-strip-est-${env}`);
+  if(_stripEst && _stripEst.style.display !== 'none'){
+    _stripEst.innerHTML = strip.innerHTML;
+  }
 }
 
 function buildStatusInline(env){
@@ -11257,8 +11260,9 @@ function gsUpdateUI(){
   // Badge indicador de conexão no botão de config
   const cfgBtn = document.getElementById('btn-gs-config');
   if(cfgBtn){
-    cfgBtn.textContent = hasAny ? '🔗 GSheets ✅' : '🔗 Google Sheets';
-    cfgBtn.style.color = hasAny ? '#34a853' : '#34a853';
+    // Não sobrescreve o texto — apenas muda a cor para indicar status
+    cfgBtn.style.color = hasAny ? '#34a853' : '#aaaaaa';
+    cfgBtn.title = hasAny ? 'Sheets conectado — clique para enviar dados' : 'Sheets não configurado';
   }
 }
 
