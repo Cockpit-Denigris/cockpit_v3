@@ -64,6 +64,10 @@
 *{margin:0;padding:0;box-sizing:border-box;}
 html{scroll-behavior:smooth;}
 body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;font-size:14px;line-height:1.6;transition:background .25s,color .25s;}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* Modo Importação */
+.modo-import-ativo .ibtn:not(#btn-modo-import){opacity:.5;pointer-events:none;}
+#btn-modo-import.ativo{background:rgba(255,80,40,.15);color:#ff5028;border-color:#ff502888;}
 
 /* ══ HOME SCREEN ════════════════════════════════ */
 #homeScreen{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);}
@@ -841,6 +845,7 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
     <button class="ibtn" onclick="exportHTMLSnapshot()" id="btn-html-snap" title="Gerar HTML snapshot" style="color:var(--grn);border-color:color-mix(in srgb,var(--grn) 30%,transparent)">📤 HTML</button>
     <button class="ibtn" onclick="importData()" id="btn-import" title="Importar dados" style="color:var(--acc);border-color:color-mix(in srgb,var(--acc) 30%,transparent)">⬆ Importar</button>
     <div style="width:1px;height:18px;background:var(--brd);flex-shrink:0;margin:0 2px"></div>
+    <button class="ibtn" id="btn-modo-import" onclick="toggleModoImportacao()" title="Pausa o envio automático ao Sheets durante importações em lote. Clique novamente para finalizar e enviar tudo." style="color:#ffaa00;border-color:#ffaa0044">📦 Modo Importação</button>
     <button class="ibtn" onclick="forcarEnvioSheets()" id="btn-gs-config" title="Enviar dados locais para o Google Sheets" style="color:#34a853;border-color:#34a85344">⬆ Enviar Sheets</button>
     <button class="ibtn" onclick="_sincronizarTudoDoSheets()" id="btn-gs-refresh" title="Sincronizar do Google Sheets" style="color:#4285f4;border-color:#4285f444">🔄 Sync</button>
     <div style="width:1px;height:18px;background:var(--brd);flex-shrink:0;margin:0 2px"></div>
@@ -2088,6 +2093,16 @@ async function enviarParaSheets(tipo, ambiente, dados, acao = 'append', periodo 
     return { sucesso: false, motivo: 'disabled' };
   }
 
+  // ── PROTEÇÃO: bloquear replace se volume novo < 50% existente ──
+  if(acao === 'replace' && tipo === 'vendas'){
+    const volumeAtual = (DB.mb||[]).length + (DB.mc||[]).length;
+    if(volumeAtual > 0 && dados.length < volumeAtual * 0.5){
+      console.warn(`🛑 BLOQUEADO: ${dados.length} < 50% de ${volumeAtual}`);
+      mostrarToastSync && mostrarToastSync(`🛑 Envio bloqueado: volume insuficiente (${dados.length} vs ${volumeAtual})`, 'warning');
+      return { sucesso: false, motivo: 'volume_insuficiente' };
+    }
+  }
+
   try {
     const total = dados.length;
     const chunks = [];
@@ -2097,10 +2112,21 @@ async function enviarParaSheets(tipo, ambiente, dados, acao = 'append', periodo 
 
     console.log(`📤 Enviando para Sheets: ${tipo}_${ambiente} (${total} registros em ${chunks.length} lote(s), acao: ${acao})`);
 
+    // Indicador visual de envio em progresso
+    const _sheetsBadge = document.getElementById('sheets-sending-badge') || (() => {
+      const b = document.createElement('div');
+      b.id = 'sheets-sending-badge';
+      b.style.cssText = 'position:fixed;bottom:18px;right:18px;z-index:99999;background:#1a3a6b;color:#fff;border-radius:10px;padding:8px 16px;font-size:12px;font-family:monospace;box-shadow:0 4px 16px #0006;display:flex;align-items:center;gap:8px;';
+      b.innerHTML = '<span style="animation:spin 1s linear infinite;display:inline-block">⏳</span> <span id="sheets-badge-txt">Enviando para Sheets...</span>';
+      document.body.appendChild(b);
+      return b;
+    })();
+    const _badgeTxt = document.getElementById('sheets-badge-txt');
+
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
-      // Primeiro lote usa a ação original (replace/append); lotes seguintes sempre append
       const acaoLote = i === 0 ? acao : 'append';
+      if(_badgeTxt) _badgeTxt.textContent = `Enviando Sheets: lote ${i+1}/${chunks.length} (${chunk.length} reg)`;
 
       const payload = {
         token: SHEETS_CONFIG.token,
@@ -2122,11 +2148,14 @@ async function enviarParaSheets(tipo, ambiente, dados, acao = 'append', periodo 
 
       console.log(`✅ Lote ${i + 1}/${chunks.length} enviado (${chunk.length} registros)`);
 
-      // Pausa entre lotes para não sobrecarregar o Apps Script
       if (i < chunks.length - 1) {
         await new Promise(res => setTimeout(res, 300));
       }
     }
+
+    // Remover badge ao finalizar
+    const _b = document.getElementById('sheets-sending-badge');
+    if(_b){ _b.innerHTML = '✅ Sheets atualizado!'; setTimeout(()=>_b.remove(), 2500); }
 
     console.log(`✅ Dados enviados para Sheets (${total} registros em ${chunks.length} lote(s))`);
 
@@ -2975,6 +3004,51 @@ function _setSaveIndicator(txt,col,fade){
   if(fade) setTimeout(()=>{el.style.opacity='0.4';},2500);
 }
 
+// ── MODO IMPORTAÇÃO ─────────────────────────────────────────────
+// Quando ativo: pausa envio automático ao Sheets. Ao desativar, envia tudo de uma vez.
+window._modoImportacaoAtivo = false;
+
+function toggleModoImportacao(){
+  const btn = document.getElementById('btn-modo-import');
+  const navbar = document.querySelector('.navbar');
+  window._modoImportacaoAtivo = !window._modoImportacaoAtivo;
+
+  if(window._modoImportacaoAtivo){
+    btn.textContent = '🔴 Finalizando Importação';
+    btn.classList.add('ativo');
+    if(navbar) navbar.classList.add('modo-import-ativo');
+    // Toast informativo
+    mostrarToastSync('📦 Modo Importação ATIVO — envio ao Sheets pausado. Clique novamente ao terminar todas as importações.', 'info');
+    console.log('📦 Modo Importação ativado — envio ao Sheets pausado');
+  } else {
+    btn.textContent = '📦 Modo Importação';
+    btn.classList.remove('ativo');
+    if(navbar) navbar.classList.remove('modo-import-ativo');
+    // Ao desativar, envia tudo de uma vez
+    mostrarToastSync('⬆ Enviando todos os dados ao Sheets...', 'info');
+    console.log('📦 Modo Importação desativado — iniciando envio completo ao Sheets');
+    _enviarTudoAoSheets();
+  }
+}
+
+async function _enviarTudoAoSheets(){
+  const env = window.activeEnv || 'mb';
+  const todos = [...(DB.mb||[]), ...(DB.mc||[])].filter(r => r && r.Filial);
+  if(todos.length === 0){
+    mostrarToastSync('⚠ Nenhum dado para enviar.', 'warning');
+    return;
+  }
+  try {
+    await enviarParaSheets('vendas', 'mb', DB.mb||[], 'append');
+    await enviarParaSheets('vendas', 'mc', DB.mc||[], 'append');
+    mostrarToastSync(`✅ ${todos.length.toLocaleString('pt-BR')} registros enviados ao Sheets com sucesso!`, 'success');
+    console.log(`✅ Envio completo: ${todos.length} registros`);
+  } catch(e) {
+    mostrarToastSync('❌ Erro ao enviar ao Sheets: ' + e.message, 'error');
+  }
+}
+// ── FIM MODO IMPORTAÇÃO ──────────────────────────────────────────
+
 async function saveState(){
   // Incluir CIDADE_MAP no payload — persiste estado zerado ou customizado
   const cidadeMapData = Object.keys(CIDADE_MAP).length > 0 ? CIDADE_MAP : '__EMPTY__';
@@ -2984,13 +3058,19 @@ async function saveState(){
   const hm=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   
   // ═══ GOOGLE SHEETS SYNC ═══════════════════════════════════════
-  // Envia dados de vendas para Google Sheets em background
   if (SHEETS_CONFIG && SHEETS_CONFIG.enabled && DB && Object.keys(DB).length > 0) {
-    const env = window.activeEnv || 'mb';
-    const dadosVendas = Object.values(DB).filter(v => v && v.fil);
-    if (dadosVendas.length > 0) {
-      enviarParaSheets('vendas', env, dadosVendas, 'append')
-        .catch(err => console.warn('⚠️ Erro ao sincronizar com Sheets:', err));
+    if(window._modoImportacaoAtivo){
+      // Modo Importação ativo — não envia agora, vai enviar tudo ao final
+      console.log('📦 Modo Importação ativo — envio ao Sheets adiado');
+    } else {
+      // Envio normal em background
+      const dadosVendas = [...(DB.mb||[]), ...(DB.mc||[])].filter(r => r && r.Filial);
+      if (dadosVendas.length > 0) {
+        enviarParaSheets('vendas', 'mb', DB.mb||[], 'append')
+          .catch(err => console.warn('⚠️ Erro MB:', err));
+        enviarParaSheets('vendas', 'mc', DB.mc||[], 'append')
+          .catch(err => console.warn('⚠️ Erro MC:', err));
+      }
     }
   }
   // ══════════════════════════════════════════════════════════════
@@ -4513,24 +4593,10 @@ function renderCmp(env,allRows){
     data:ms.map(m=>valByAnoMes[ano][m]),
     borderColor:LCOLORS[ai%LCOLORS.length],backgroundColor:LCOLORS[ai%LCOLORS.length]+'18',
     fill:true,borderWidth:2.5,pointRadius:4,tension:.4,
-    datalabels:{
-      color:LCOLORS[ai%LCOLORS.length],
-      font:{family:'JetBrains Mono',size:9,weight:'700'},
-      formatter:v=>(v!=null&&v!==0)?fmtCmp(key,v):'',
-      // Alternar acima/abaixo por ano para evitar sobreposição
-      align: ai%2===0 ? 'top' : 'bottom',
-      anchor: ai%2===0 ? 'end' : 'start',
-      offset: 6,
-      // Sem fundo — só o texto colorido da série
-      backgroundColor: 'transparent',
-      borderRadius:0,
-      padding:0,
-      // Clamp para não sair do gráfico
-      clamp: true,
-    }
+    datalabels:{ display:false }
   }));
 
-  const chartOpts={...baseOpts(),plugins:{...baseOpts().plugins,datalabels:{display:true}}};
+  const chartOpts={...baseOpts(),plugins:{...baseOpts().plugins,datalabels:{display:false}}};
   if(isPct){
     chartOpts.scales={y:{ticks:{callback:v=>v.toFixed(1)+'%',color:chartLbl(.6),font:{size:10}},grid:{color:chartGrid()},border:{display:false}},
       x:{ticks:{color:chartLbl(.6),font:{size:10}},grid:{display:false},border:{display:false}}};
@@ -6167,10 +6233,10 @@ function buildStatusInline(env){
     const periodoStr = dreMesMin===dreMesMax
       ? MN2[dreMesMin-1]
       : `${MN2[dreMesMin-1]}→${MN2[dreMesMax-1]}`;
-    tags.push(`<span style="background:var(--grn)18;color:var(--grn);border:1px solid var(--grn)44;border-radius:5px;padding:1px 7px;font-weight:700">✅ DRE Oficial · ${dreFiliais.join(', ')} · ${dreAnos.join('/')} (${periodoStr})</span>`);
+    tags.push(`<span style="background:var(--grn)18;color:var(--grn);border:1px solid var(--grn)44;border-radius:5px;padding:1px 7px;font-weight:700">✅ ✅ DRE Oficial</span>`);
   }
 
-  if(fontes.dms>0)    tags.push(`<span style="color:var(--blu)">📋 DMS (${fontes.dms.toLocaleString('pt-BR')} linhas)</span>`);
+  if(fontes.dms>0)    tags.push(`<span style="color:var(--blu)">📋 DMS</span>`);
   if(fontes.os>0)     tags.push(`<span style="color:var(--pur)">🔧 Tipos OS</span>`);
   if(fontes.manual>0) tags.push(`<span style="color:var(--acc)">✍ Manual</span>`);
   if(nMetas>0)        tags.push(`<span style="color:var(--ora)">🎯 ${nMetas} metas</span>`);
@@ -6183,7 +6249,7 @@ function buildStatusInline(env){
     if(dmsSemDRE.length>0){
       const mesesProv=[...new Set(dmsSemDRE.map(r=>r.Mês_Num))].sort((a,b)=>a-b);
       const MN3=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-      avisoProvisorio=`<span style="color:var(--acc);font-size:10px">⚠ DMS provisório: ${mesesProv.map(m=>MN3[m-1]).join(', ')} (aguardando DRE)</span>`;
+      avisoProvisorio=`<span style="color:var(--acc);font-size:10px">⚠ DMS provisório (aguardando DRE)</span>`;
     }
   }
 
@@ -7364,7 +7430,11 @@ function parseDRESheetNovo(sh, env){
   });
   if(!Object.keys(colMesAno).length) return [];
 
-  // ── Ler filial (remover aspas simples prefixadas) ─────────────────────
+  // ── Detectar formato: col0=filial+col1=tipo (DRE_Upload) ou col0=tipo (antigo) ──
+  const _hdr0 = String(hdr[0]||'').toUpperCase().trim();
+  const _hdr1 = String(hdr[1]||'').toUpperCase().trim();
+  const _isNovoFormato = _hdr0.includes('FILIAL') && _hdr1.includes('TIPO');
+  const _colDataStart = _isNovoFormato ? 2 : 1;
   const filialRaw = String(aoa[1]?.[0] || '').replace(/^'+/,'').trim();
   const filialNome = mapFilial(filialRaw) || filialRaw || 'Desconhecida';
 
@@ -8339,8 +8409,11 @@ const ROLE_LABELS = {
 const DEFAULT_ADMIN = { id:'__admin__', nome:'Administrador', login:'admin', senha:'admin123', role:'admin', filiais:[], modulos:[] };
 
 const BUILTIN_USERS = [
-  { id:'__fabio__',   nome:'Fabio Freitas', login:'afabio.freitas', senha:'Mudar123', role:'full', filiais:[], modulos:[] },
-  { id:'__giovane__', nome:'Giovane Silva', login:'giovane.silva',  senha:'Mudar123', role:'full', filiais:[], modulos:[] },
+  { id:'__fabio__',   nome:'Fabio Freitas',  login:'afabio.freitas', senha:'Mudar123', role:'full',    filiais:[], modulos:[] },
+  { id:'__giovane__', nome:'Giovane Silva',  login:'giovane.silva',  senha:'Mudar123', role:'full',    filiais:[], modulos:[] },
+  { id:'__rodrigo__', nome:'Rodrigo Pulgas', login:'rodrigo.pulgas', senha:'Mudar123', role:'full',    filiais:[], modulos:[], primeiroAcesso:true },
+  { id:'__marcelo__', nome:'Marcelo Santos', login:'marcelo.santos', senha:'Mudar123', role:'consult', filiais:[], modulos:[], primeiroAcesso:true },
+  { id:'__arlei__',   nome:'Arlei Bethiol',  login:'arlei.bethiol',  senha:'Mudar123', role:'consult', filiais:[], modulos:[], primeiroAcesso:true },
 ];
 
 function authGetUsers(){
@@ -8419,6 +8492,10 @@ function doLogout(){
 
 function authEnter(){
   document.getElementById('authScreen').style.display='none';
+  if(_currentUser && _currentUser.primeiroAcesso){
+    _forcarTrocaSenha(_currentUser);
+    return;
+  }
   authApplyPermissions();
   appInit();
   // Show home or go direct if single env access
@@ -8433,6 +8510,58 @@ function authEnter(){
   if(inf) inf.innerHTML=`Olá, <strong style="color:var(--txt)">${u.nome}</strong> &nbsp;·&nbsp; <span class="role-badge ${ROLE_LABELS[u.role].cls}">${ROLE_LABELS[u.role].icon} ${ROLE_LABELS[u.role].lbl}</span>`;
   document.getElementById('home-logout-btn').style.display='';
   document.getElementById('homeScreen').style.display='flex';
+}
+
+function _forcarTrocaSenha(u){
+  const ov=document.createElement('div');
+  ov.id='first-access-ov';
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:var(--bg);display:flex;align-items:center;justify-content:center;';
+  ov.innerHTML=`
+    <div style="background:var(--card);border:1px solid var(--brd);border-radius:18px;width:420px;max-width:96vw;padding:32px;box-shadow:var(--shd)">
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:4px">🔑 Primeiro Acesso</div>
+      <div style="font-size:12px;color:var(--txt3);margin-bottom:24px">Olá, <strong style="color:var(--txt)">${u.nome}</strong>! Por segurança, defina uma nova senha antes de continuar.</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div>
+          <label style="font-size:11px;color:var(--txt3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Nova Senha</label>
+          <input type="password" id="fa-nova" placeholder="mínimo 6 caracteres"
+            style="width:100%;background:var(--card2);border:1px solid var(--brd);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--txt);outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--txt3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Confirmar Nova Senha</label>
+          <input type="password" id="fa-conf" placeholder="repita a nova senha"
+            onkeydown="if(event.key==='Enter')_confirmarPrimeiraSenha()"
+            style="width:100%;background:var(--card2);border:1px solid var(--brd);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--txt);outline:none;box-sizing:border-box">
+        </div>
+      </div>
+      <div id="fa-msg" style="font-size:12px;min-height:18px;margin-top:10px;color:var(--red)"></div>
+      <button onclick="_confirmarPrimeiraSenha()"
+        style="margin-top:16px;width:100%;padding:11px;background:var(--mb);color:#fff;border:none;border-radius:8px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer">
+        ✓ Definir Senha e Entrar
+      </button>
+    </div>`;
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const el=document.getElementById('fa-nova'); if(el) el.focus(); },100);
+}
+
+function _confirmarPrimeiraSenha(){
+  const nova=(document.getElementById('fa-nova')||{}).value||'';
+  const conf=(document.getElementById('fa-conf')||{}).value||'';
+  const msg=document.getElementById('fa-msg');
+  if(!nova||nova.length<6){ if(msg) msg.textContent='A senha deve ter no mínimo 6 caracteres.'; return; }
+  if(nova!==conf){ if(msg) msg.textContent='As senhas não coincidem.'; return; }
+  if(nova==='Mudar123'||nova==='admin123'){ if(msg) msg.textContent='Escolha uma senha diferente da senha padrão.'; return; }
+  const todos=authGetAll();
+  const idx=todos.findIndex(x=>x.id===_currentUser.id);
+  if(idx>=0){
+    todos[idx].senha=nova;
+    delete todos[idx].primeiroAcesso;
+    _currentUser=todos[idx];
+    authSaveUsers(todos.filter(u=>u.id!=='__admin__'));
+  }
+  const ov=document.getElementById('first-access-ov');
+  if(ov) ov.remove();
+  authApplyPermissions();
+  appInit();
 }
 
 function authApplyPermissions(){
