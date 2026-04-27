@@ -3648,7 +3648,17 @@ function goTab(env,tab,btn){
       stripEst.id = `status-strip-est-${env}`;
       stripEst.style.cssText = 'font-size:11px;gap:10px;flex-wrap:wrap;align-items:center;background:var(--card2);border:1px solid var(--brd);border-radius:8px;padding:8px 14px;margin:8px 16px 0;display:flex;';
       const estPage = document.getElementById(`${env}-est`);
-      if(estPage) estPage.insertBefore(stripEst, estPage.firstChild);
+      if(estPage){
+        // Inserir APÓS o filterbar e subnav — não antes
+        const fbEstEl = document.getElementById(`fb-est-${env}`);
+        const snEstEl = document.getElementById(`est-subnav-${env}`);
+        const anchor = snEstEl || fbEstEl;
+        if(anchor && anchor.nextSibling){
+          estPage.insertBefore(stripEst, anchor.nextSibling);
+        } else {
+          estPage.appendChild(stripEst);
+        }
+      }
     }
     if(strip && strip._hasData){
       stripEst.innerHTML = strip.innerHTML;
@@ -7435,24 +7445,46 @@ function parseDRESheetNovo(sh, env){
     // Remover aspas simples prefixadas
     const vClean = typeof v === 'string' ? v.replace(/^'+/,'').trim() : v;
 
-    // Serial numérico Excel (raw:true)
-    if(typeof vClean === 'number' && vClean > 40000){
-      const r = xlSerialToMesAno(vClean);
-      if(r){ mes=r.mes; ano=r.ano; }
+    // 1. Objeto Date (SheetJS com raw:false ou xlsx que entrega Date objects)
+    if(!mes && v instanceof Date && !isNaN(v)){
+      mes = v.getMonth()+1; ano = v.getFullYear();
     }
-    // String ISO: "2024-01-01" ou "2024-01-01T..."
+    // 2. String ISO: "2024-01-01" ou "2024-01-01T..."
     if(!mes && typeof vClean === 'string'){
       const mISO = vClean.match(/^(\d{4})-(\d{2})/);
       if(mISO){ ano=+mISO[1]; mes=+mISO[2]; }
     }
-    // Formato "Jan-24" ou "Jan-2024" (number_format='mmm-yy')
+    // 3. Serial numérico Excel (raw:true) — number > 40000
+    if(!mes && typeof vClean === 'number' && vClean > 40000){
+      const r = xlSerialToMesAno(vClean);
+      if(r){ mes=r.mes; ano=r.ano; }
+    }
+    // 4. Serial como STRING '45292.0' (xls via xlrd)
+    if(!mes && typeof vClean === 'string' && /^\d{4,6}\.?\d*$/.test(vClean)){
+      const serial = parseFloat(vClean);
+      if(serial > 40000){
+        const r = xlSerialToMesAno(serial);
+        if(r){ mes=r.mes; ano=r.ano; }
+      }
+    }
+    // 5. Formato "Jan-24" ou "Jan-2024" (number_format='mmm-yy')
     if(!mes && typeof vClean === 'string'){
       const mMMM = vClean.match(/^([A-Za-z]{3})[- ](\d{2,4})$/);
       if(mMMM){
         const nomeMes = mMMM[1].toLowerCase();
         mes = MES_EN[nomeMes] || MES_PT[nomeMes] || 0;
         ano = +mMMM[2];
-        if(ano < 100) ano += 2000; // "24" → 2024
+        if(ano < 100) ano += 2000;
+      }
+    }
+    // 6. Formato PT "Jan/2024" ou "Jan/24"
+    if(!mes && typeof vClean === 'string'){
+      const mPT = vClean.match(/^([A-Za-zÀ-ú]{3})\/\s*(\d{2,4})$/);
+      if(mPT){
+        const nomeMes = mPT[1].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+        mes = MES_EN[nomeMes] || MES_PT[nomeMes] || 0;
+        ano = +mPT[2];
+        if(ano < 100) ano += 2000;
       }
     }
     if(mes && ano && ano >= 2020 && ano <= 2035) colMesAno[ci] = {mes, ano};
