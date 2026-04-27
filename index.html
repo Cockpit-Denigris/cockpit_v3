@@ -170,15 +170,15 @@ body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;font
 .cmp-b:hover{color:var(--txt);}
 .cmp-b.on{background:var(--acc);color:var(--bg);}
 
-/* Est filterbar — top calculado dinamicamente via JS (ver ajustarOffsetEstoque) */
+/* Est filterbar — mesmo top que filterbar principal (navbar-h) */
 .filterbar.fb-est{
-  top:calc(var(--navbar-h) + 80px);
+  top:var(--navbar-h);
   z-index:480;
 }
-/* est subnav offset */
+/* est subnav — abaixo do fb-est (calculado via JS) */
 .est-subnav-bar{
   padding:0 16px;background:var(--surf);border-bottom:1px solid var(--brd);
-  position:sticky;top:calc(var(--navbar-h) + 160px);
+  position:sticky;top:calc(var(--navbar-h) + 80px);
   z-index:470;flex-wrap:nowrap;overflow-x:auto;
 }
 
@@ -3561,16 +3561,16 @@ function goTab(env,tab,btn){
 
   // Render content
   if(tab==='est'){
-    // Calcular offset correto para o fb-est baseado na altura real do filterbar principal
     requestAnimationFrame(()=>{
-      const fbMain = document.getElementById('fb-mb') || document.getElementById('fb-mc');
+      // Ajustar subnav abaixo do fb-est dinamicamente
       const navbar = document.querySelector('.navbar');
-      const navH = navbar ? navbar.offsetHeight : 48;
-      const fbH  = fbMain ? fbMain.offsetHeight : 80;
+      const navH = navbar ? navbar.offsetHeight : 52;
       const fbEst = document.getElementById(`fb-est-${env}`);
       const snEst = document.querySelector('.est-subnav-bar');
-      if(fbEst){ fbEst.style.top = (navH + fbH) + 'px'; }
-      if(snEst){ snEst.style.top = (navH + fbH + (fbEst ? fbEst.offsetHeight : 80)) + 'px'; }
+      if(fbEst && snEst){
+        const fbEstH = fbEst.offsetHeight || 80;
+        snEst.style.top = (navH + fbEstH) + 'px';
+      }
       initEstFilters(env); renderEstoque(env);
     });
   } else if(tab==='fat' && env==='mb'){
@@ -6167,10 +6167,10 @@ function buildStatusInline(env){
     const periodoStr = dreMesMin===dreMesMax
       ? MN2[dreMesMin-1]
       : `${MN2[dreMesMin-1]}→${MN2[dreMesMax-1]}`;
-    tags.push(`<span style="background:var(--grn)18;color:var(--grn);border:1px solid var(--grn)44;border-radius:5px;padding:1px 7px;font-weight:700">✅ DRE Oficial</span>`);
+    tags.push(`<span style="background:var(--grn)18;color:var(--grn);border:1px solid var(--grn)44;border-radius:5px;padding:1px 7px;font-weight:700">✅ DRE Oficial · ${dreFiliais.join(', ')} · ${dreAnos.join('/')} (${periodoStr})</span>`);
   }
 
-  if(fontes.dms>0)    tags.push(`<span style="color:var(--blu)">📋 DMS</span>`);
+  if(fontes.dms>0)    tags.push(`<span style="color:var(--blu)">📋 DMS (${fontes.dms.toLocaleString('pt-BR')} linhas)</span>`);
   if(fontes.os>0)     tags.push(`<span style="color:var(--pur)">🔧 Tipos OS</span>`);
   if(fontes.manual>0) tags.push(`<span style="color:var(--acc)">✍ Manual</span>`);
   if(nMetas>0)        tags.push(`<span style="color:var(--ora)">🎯 ${nMetas} metas</span>`);
@@ -6183,13 +6183,15 @@ function buildStatusInline(env){
     if(dmsSemDRE.length>0){
       const mesesProv=[...new Set(dmsSemDRE.map(r=>r.Mês_Num))].sort((a,b)=>a-b);
       const MN3=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-      avisoProvisorio=`<span style="color:var(--acc);font-size:10px">⚠ DMS provisório (aguardando DRE)</span>`;
+      avisoProvisorio=`<span style="color:var(--acc);font-size:10px">⚠ DMS provisório: ${mesesProv.map(m=>MN3[m-1]).join(', ')} (aguardando DRE)</span>`;
     }
   }
 
   return `
     <span style="color:var(--txt3);font-weight:600;font-size:10px;letter-spacing:.04em">DADOS:</span>
     <span>${filiais.map(f=>`<strong>${f}</strong>`).join(', ')}</span>
+    <span style="color:var(--brd2)">|</span>
+    <span style="color:var(--txt3)">Anos: <strong>${anos.join(', ')}</strong></span>
     <span style="color:var(--brd2)">|</span>
     ${tags.join('<span style="color:var(--brd2);margin:0 2px">·</span>')}
     ${avisoProvisorio?'<span style="color:var(--brd2)">|</span>'+avisoProvisorio:''}
@@ -7333,7 +7335,7 @@ function parseDRESheetNovo(sh, env){
   const MES_PT = {jan:1,fev:2,mar:3,abr:4,mai:5,jun:6,jul:7,ago:8,set:9,out:10,nov:11,dez:12};
 
   hdr.forEach((v, ci) => {
-    if(ci < _colDataStart) return;
+    if(ci < 2) return;
     let mes=0, ano=0;
     // Remover aspas simples prefixadas
     const vClean = typeof v === 'string' ? v.replace(/^'+/,'').trim() : v;
@@ -7362,19 +7364,8 @@ function parseDRESheetNovo(sh, env){
   });
   if(!Object.keys(colMesAno).length) return [];
 
-  // ── Detectar formato: col0=filial+col1=tipo (DRE_Upload) ou col0=tipo (formato antigo) ──
-  // DRE_Upload.xlsx: col 0 = FILIAL, col 1 = TIPO (indicador)
-  // Formato antigo: col 0 = indicador, sem coluna de filial
-  const _hdr0 = String(hdr[0]||'').toUpperCase().trim();
-  const _hdr1 = String(hdr[1]||'').toUpperCase().trim();
-  const _isNovoFormato = _hdr0.includes('FILIAL') && _hdr1.includes('TIPO');
-  const _colLabel = _isNovoFormato ? 1 : 0; // col do indicador
-  const _colDataStart = _isNovoFormato ? 2 : 1; // col onde começam as datas
-
-  // ── Ler filial ────────────────────────────────────────────────────────
-  const filialRaw = _isNovoFormato
-    ? String(aoa[1]?.[0] || '').replace(/^'+/,'').trim()
-    : String(aoa[1]?.[0] || '').replace(/^'+/,'').trim();
+  // ── Ler filial (remover aspas simples prefixadas) ─────────────────────
+  const filialRaw = String(aoa[1]?.[0] || '').replace(/^'+/,'').trim();
   const filialNome = mapFilial(filialRaw) || filialRaw || 'Desconhecida';
 
   // ── Extrator de valor numérico ─────────────────────────────────────────
@@ -7396,7 +7387,7 @@ function parseDRESheetNovo(sh, env){
 
   // ── Leitura por índice de linha fixo (0-based após header) ────────────
   //   aoa[0] = header → aoa[1] = linha Excel 2 → aoa[i] = linha Excel i+1
-  const rowVal = (rowIdx0, ci) => numVal((aoa[rowIdx0]||[])[_isNovoFormato ? ci+1 : ci]);
+  const rowVal = (rowIdx0, ci) => numVal((aoa[rowIdx0]||[])[ci]);
 
   // ── Montar byMes com o mapeamento correto ─────────────────────────────
   // IMPORTANTE: Linhas com fórmulas (SUM, IFERROR, subtração) são recalculadas
@@ -8348,11 +8339,8 @@ const ROLE_LABELS = {
 const DEFAULT_ADMIN = { id:'__admin__', nome:'Administrador', login:'admin', senha:'admin123', role:'admin', filiais:[], modulos:[] };
 
 const BUILTIN_USERS = [
-  { id:'__fabio__',   nome:'Fabio Freitas',  login:'afabio.freitas', senha:'Mudar123', role:'full',    filiais:[], modulos:[] },
-  { id:'__giovane__', nome:'Giovane Silva',  login:'giovane.silva',  senha:'Mudar123', role:'full',    filiais:[], modulos:[] },
-  { id:'__rodrigo__', nome:'Rodrigo Pulgas', login:'rodrigo.pulgas', senha:'Mudar123', role:'full',    filiais:[], modulos:[], primeiroAcesso:true },
-  { id:'__marcelo__', nome:'Marcelo Santos', login:'marcelo.santos', senha:'Mudar123', role:'consult', filiais:[], modulos:[], primeiroAcesso:true },
-  { id:'__arlei__',   nome:'Arlei Bethiol',  login:'arlei.bethiol',  senha:'Mudar123', role:'consult', filiais:[], modulos:[], primeiroAcesso:true },
+  { id:'__fabio__',   nome:'Fabio Freitas', login:'afabio.freitas', senha:'Mudar123', role:'full', filiais:[], modulos:[] },
+  { id:'__giovane__', nome:'Giovane Silva', login:'giovane.silva',  senha:'Mudar123', role:'full', filiais:[], modulos:[] },
 ];
 
 function authGetUsers(){
