@@ -2791,7 +2791,7 @@ function clrExecutar(){
         }
         // Aguardar Sheets processar antes de confirmar
         // Aguardar Sheets processar o delete granular
-        await new Promise(res=>setTimeout(res, 4000));
+        await new Promise(res=>setTimeout(res, 8000));
         mostrarToastSync('✅ Dados limpos localmente e no Sheets!', 'success');
         if(status) status.textContent='✅ Limpo localmente e no Sheets. Outros dispositivos verão a limpeza ao recarregar.';
       }catch(err){
@@ -13373,9 +13373,9 @@ async function limparTudoComSheets(env) {
       }
     }
     
-    mostrarToastSync('✅ Dados limpos! Aguardando Sheets processar...', 'success');
+    mostrarToastSync('✅ Dados limpos! Aguardando Sheets processar (8s)...', 'success');
     // Aguardar Sheets processar o delete antes de recarregar
-    await new Promise(res => setTimeout(res, 4000));
+    await new Promise(res => setTimeout(res, 8000));
     mostrarToastSync('🔄 Recarregando...', 'info');
   } else {
     mostrarToastSync('✅ Dados limpos do navegador!', 'success');
