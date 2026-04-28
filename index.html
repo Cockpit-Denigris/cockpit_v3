@@ -2784,15 +2784,19 @@ function clrExecutar(){
             }
           }
         }
-        mostrarToastSync('✅ Dados limpos no Sheets!', 'success');
+        // Aguardar Sheets processar antes de confirmar
+        await new Promise(res=>setTimeout(res, 2000));
+        mostrarToastSync('✅ Dados limpos localmente e no Sheets!', 'success');
+        if(status) status.textContent='✅ Limpo localmente e no Sheets. Outros dispositivos verão a limpeza ao recarregar.';
       }catch(err){
         console.warn('⚠️ Sheets sync erro:', err);
+        mostrarToastSync('⚠️ Limpo localmente. Verifique conexão com o Sheets.', 'warning');
       }
     })();
   }
   // ════════════════════════════════════════════════════════════════
   
-  setTimeout(()=>{ if(status) status.textContent=''; },6000);
+  setTimeout(()=>{ if(status) status.textContent=''; },8000);
   }); // end _admConfirm
 }
 function clrCidades(){
@@ -8965,18 +8969,10 @@ function appInit(){
   // SEMPRE buscar do Sheets ao abrir — garante que todos os dispositivos
   // vejam os dados mais recentes. Dados locais ficam visíveis enquanto carrega.
   if(SHEETS_CONFIG && SHEETS_CONFIG.enabled){
-    if(!hasAny){
-      // Sem dados locais → loading screen completo
-      console.log('📡 Sem dados locais — buscando do Google Sheets...');
-      _sincronizarTudoDoSheets();
-    } else {
-      // Com dados locais → renderiza imediatamente com o que tem
-      // e atualiza silenciosamente do Sheets em background
-      console.log('🔄 Dados locais carregados — atualizando do Sheets em background...');
-      ['mb','mc'].forEach(env=>{ renderAll(env); renderStatusStrip(env); });
-      // Pequeno delay para não travar a UI no carregamento
-      setTimeout(()=> _sincronizarTudoDoSheets(), 1500);
-    }
+    // SEMPRE buscar do Sheets ao abrir — garante dados atualizados em qualquer dispositivo
+    // Dados locais são descartados em favor do Sheets (fonte de verdade)
+    console.log('📡 Sincronizando com Google Sheets — fonte de verdade...');
+    _sincronizarTudoDoSheets();
   } else if(hasAny) {
     ['mb','mc'].forEach(env=>{ renderAll(env); renderStatusStrip(env); });
   }
@@ -9023,6 +9019,9 @@ async function forcarEnvioSheets(){
 }
 
 async function _sincronizarTudoDoSheets(){
+  // Limpar dados locais antes de popular do Sheets — evita duplicatas
+  // O Sheets é a fonte de verdade
+  DB.mb = []; DB.mc = [];
   // Mostrar loading screen visível na home enquanto busca do Sheets
   const homeLoadEl = document.getElementById('home-migrate-hint');
   const loadScreen = document.createElement('div');
