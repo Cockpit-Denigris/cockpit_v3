@@ -174,16 +174,18 @@ body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;font
 .cmp-b:hover{color:var(--txt);}
 .cmp-b.on{background:var(--acc);color:var(--bg);}
 
-/* Est filterbar — mesmo top que filterbar principal (navbar-h) */
+/* Est filterbar — idêntico ao filterbar principal */
 .filterbar.fb-est{
   top:var(--navbar-h);
   z-index:480;
+  min-height:var(--filter-h);
 }
 /* est subnav — abaixo do fb-est (calculado via JS) */
 .est-subnav-bar{
   padding:0 16px;background:var(--surf);border-bottom:1px solid var(--brd);
-  position:sticky;top:calc(var(--navbar-h) + 80px);
+  position:sticky;top:calc(var(--navbar-h) + var(--filter-h));
   z-index:470;flex-wrap:nowrap;overflow-x:auto;
+  display:flex;align-items:center;min-height:36px;
 }
 
 /* ══ MAIN ───────────────────────────────────── */
@@ -2263,8 +2265,11 @@ async function sincronizarEstoqueComSheets(ambiente) {
       
       return dadosSheets;
     } else {
-      // Se não tem no Sheets, tentar carregar do localStorage
-      loadEstState();
+      // Sheets sem estoque — limpar localStorage também para não mostrar dados velhos
+      localStorage.removeItem('dn_est_v2');
+      EST_DATA.mb = { snapshots:{} };
+      EST_DATA.mc = { snapshots:{} };
+      console.log('📦 Sem estoque no Sheets — localStorage limpo');
       return null;
     }
     
@@ -6704,7 +6709,8 @@ window.addEventListener('load',()=>{
   // ═══ CARREGAR DADOS DO IDB/localStorage (principal) ═════════════
   // Sheets é apenas backup — leitura via botão 🔄 Sync manual
   const _snapLoaded = loadSnapshotData();
-  (_snapLoaded ? Promise.resolve(true) : loadState()).then(loaded=>{
+  // Se Sheets ativo, não usar localStorage — Sheets já populou o DB
+  (_snapLoaded ? Promise.resolve(true) : (SHEETS_CONFIG?.enabled ? Promise.resolve(false) : loadState())).then(loaded=>{
     if(loaded){
       ['mb','mc'].forEach(env=>{
         initAnoChips(env); initFilialChips(env);
@@ -8978,10 +8984,11 @@ function appInit(){
   // home screen accent color
   document.getElementById('homeAccent').style.color='var(--mb)';
   // Estoque state
-  loadEstState();
-  if(Object.keys(EST_DATA.mb.snapshots||{}).length){ initEstFilters('mb'); renderEstoque('mb'); }
-  if(Object.keys(EST_DATA.mc.snapshots||{}).length){ initEstFilters('mc'); renderEstoque('mc'); }
-  loadDespState();
+  // Sheets é a fonte de verdade — não carregar nada do localStorage
+  EST_DATA.mb = { snapshots:{} };
+  EST_DATA.mc = { snapshots:{} };
+  DESP_DATA.mb = {}; DESP_DATA.mc = {};
+  // NÃO chamar loadDespState() — despesas vêm do Sync com Sheets
   initAnoChips('mb'); initFilialChips('mb');
   initAnoChips('mc'); initFilialChips('mc');
   initOsChecks();
@@ -9046,9 +9053,11 @@ async function forcarEnvioSheets(){
 }
 
 async function _sincronizarTudoDoSheets(){
-  // Limpar dados locais antes de popular do Sheets — evita duplicatas
-  // O Sheets é a fonte de verdade
+  // Limpar TUDO antes de popular do Sheets — Sheets é a fonte de verdade
   DB.mb = []; DB.mc = [];
+  DESP_DATA.mb = {}; DESP_DATA.mc = {};
+  EST_DATA.mb = { snapshots:{} }; EST_DATA.mc = { snapshots:{} };
+  Object.keys(METAS).forEach(k => delete METAS[k]);
   // Mostrar loading screen visível na home enquanto busca do Sheets
   const homeLoadEl = document.getElementById('home-migrate-hint');
   const loadScreen = document.createElement('div');
