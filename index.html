@@ -66,7 +66,10 @@ html{scroll-behavior:smooth;}
 body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;font-size:14px;line-height:1.6;transition:background .25s,color .25s;}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* Modo Importação */
-.modo-import-ativo .ibtn:not(#btn-modo-import){opacity:.5;pointer-events:none;}
+.modo-import-ativo .ibtn:not(#btn-modo-import):not(#btn-import):not(#btn-upload-mb):not(#btn-upload-mc){opacity:.5;pointer-events:none;}
+/* Botões prime (Carregar) nunca bloqueados no Modo Importação */
+.modo-import-ativo .ibtn.prime-mb,
+.modo-import-ativo .ibtn.prime-mc{opacity:1!important;pointer-events:auto!important;}
 #btn-modo-import.ativo{background:rgba(255,80,40,.15);color:#ff5028;border-color:#ff502888;}
 
 /* ══ HOME SCREEN ════════════════════════════════ */
