@@ -3037,17 +3037,46 @@ function toggleModoImportacao(){
 }
 
 async function _enviarTudoAoSheets(){
-  const env = window.activeEnv || 'mb';
   const todos = [...(DB.mb||[]), ...(DB.mc||[])].filter(r => r && r.Filial);
-  if(todos.length === 0){
-    mostrarToastSync('⚠ Nenhum dado para enviar.', 'warning');
-    return;
-  }
   try {
-    await enviarParaSheets('vendas', 'mb', DB.mb||[], 'append');
-    await enviarParaSheets('vendas', 'mc', DB.mc||[], 'append');
-    mostrarToastSync(`✅ ${todos.length.toLocaleString('pt-BR')} registros enviados ao Sheets com sucesso!`, 'success');
-    console.log(`✅ Envio completo: ${todos.length} registros`);
+    mostrarToastSync('⬆ Enviando vendas ao Sheets...', 'info');
+    if((DB.mb||[]).length > 0) await enviarParaSheets('vendas', 'mb', DB.mb, 'append');
+    if((DB.mc||[]).length > 0) await enviarParaSheets('vendas', 'mc', DB.mc, 'append');
+
+    // Estoque
+    for(const env of ['mb','mc']){
+      const snaps = EST_DATA[env]?.snapshots || {};
+      const items = Object.values(snaps).flat();
+      if(items.length > 0){
+        mostrarToastSync(`⬆ Enviando estoque ${env.toUpperCase()}...`, 'info');
+        await limparDoSheets('estoque', env);
+        await enviarParaSheets('estoque', env, items, 'append');
+      }
+    }
+
+    // Despesas
+    for(const env of ['mb','mc']){
+      const envData = DESP_DATA[env] || {};
+      const allRows = [];
+      Object.entries(envData).forEach(([filial, mesesObj]) => {
+        Object.entries(mesesObj).forEach(([amKey, entry]) => {
+          const [ano, mes] = amKey.split('_');
+          (entry.contas || []).forEach(c => {
+            allRows.push({ _env:env, _filial:filial, _periodo:amKey, _ano:ano, _mes:mes,
+              codigo:c.codigo, nome:c.nome, debito:c.debito, credito:c.credito,
+              saldoAnterior:c.saldoAnterior||0, saldoAtual:c.saldoAtual||0, _fonte:'despesas' });
+          });
+        });
+      });
+      if(allRows.length > 0){
+        mostrarToastSync(`⬆ Enviando despesas ${env.toUpperCase()}...`, 'info');
+        await limparDoSheets('despesas', env);
+        await enviarParaSheets('despesas', env, allRows, 'append');
+      }
+    }
+
+    mostrarToastSync(`✅ Tudo enviado ao Sheets! (${todos.length.toLocaleString('pt-BR')} registros de vendas)`, 'success');
+    console.log(`✅ Envio completo: ${todos.length} registros de vendas + estoque + despesas`);
   } catch(e) {
     mostrarToastSync('❌ Erro ao enviar ao Sheets: ' + e.message, 'error');
   }
@@ -3650,7 +3679,7 @@ function goTab(env,tab,btn){
     if(!stripEst){
       stripEst = document.createElement('div');
       stripEst.id = `status-strip-est-${env}`;
-      stripEst.style.cssText = 'font-size:11px;gap:10px;flex-wrap:wrap;align-items:center;background:var(--card2);border:1px solid var(--brd);border-radius:8px;padding:8px 14px;margin:8px 16px 0;display:flex;';
+      stripEst.style.cssText = 'font-size:11px;gap:8px;flex-wrap:wrap;align-items:center;background:var(--surf);border-bottom:1px solid var(--brd);padding:5px 16px;display:flex;position:sticky;z-index:465;';
       const estPage = document.getElementById(`${env}-est`);
       if(estPage){
         // Inserir APÓS o filterbar e subnav — não antes
@@ -6276,7 +6305,7 @@ function buildStatusInline(env){
     const periodoStr = dreMesMin===dreMesMax
       ? MN2[dreMesMin-1]
       : `${MN2[dreMesMin-1]}→${MN2[dreMesMax-1]}`;
-    tags.push(`<span style="background:var(--grn)18;color:var(--grn);border:1px solid var(--grn)44;border-radius:5px;padding:1px 7px;font-weight:700">✅ ✅ DRE Oficial</span>`);
+    tags.push(`<span style="background:var(--grn)18;color:var(--grn);border:1px solid var(--grn)44;border-radius:5px;padding:1px 7px;font-weight:700">✅ DRE Oficial</span>`);
   }
 
   if(fontes.dms>0)    tags.push(`<span style="color:var(--blu)">📋 DMS</span>`);
@@ -6299,8 +6328,6 @@ function buildStatusInline(env){
   return `
     <span style="color:var(--txt3);font-weight:600;font-size:10px;letter-spacing:.04em">DADOS:</span>
     <span>${filiais.map(f=>`<strong>${f}</strong>`).join(', ')}</span>
-    <span style="color:var(--brd2)">|</span>
-    <span style="color:var(--txt3)">Anos: <strong>${anos.join(', ')}</strong></span>
     <span style="color:var(--brd2)">|</span>
     ${tags.join('<span style="color:var(--brd2);margin:0 2px">·</span>')}
     ${avisoProvisorio?'<span style="color:var(--brd2)">|</span>'+avisoProvisorio:''}
@@ -9375,7 +9402,7 @@ function saveEstState(){
   try{ localStorage.setItem('dn_est_v2',JSON.stringify({mb:EST_DATA.mb,mc:EST_DATA.mc})); }catch(e){}
   
   // ═══ GOOGLE SHEETS SYNC ═══════════════════════════════════════
-  // Envia dados de estoque para Google Sheets
+  if(window._modoImportacaoAtivo){ console.log('📦 Modo Importação — estoque adiado'); return; }
   if (SHEETS_CONFIG && SHEETS_CONFIG.enabled) {
     ['mb', 'mc'].forEach(async env => {
       const snapshots = EST_DATA[env]?.snapshots || {};
@@ -11863,6 +11890,7 @@ function saveDespState(){
   try{ localStorage.setItem(DESP_LS_KEY, JSON.stringify(DESP_DATA)); }catch(e){}
 
   // ═══ GOOGLE SHEETS SYNC — DESPESAS ════════════════════════════
+  if(window._modoImportacaoAtivo){ console.log('📦 Modo Importação — despesas adiadas'); return; }
   if (SHEETS_CONFIG && SHEETS_CONFIG.enabled) {
     ['mb', 'mc'].forEach(async env => {
       const envData = DESP_DATA[env] || {};
