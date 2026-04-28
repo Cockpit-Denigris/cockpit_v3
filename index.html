@@ -2790,7 +2790,8 @@ function clrExecutar(){
           }
         }
         // Aguardar Sheets processar antes de confirmar
-        await new Promise(res=>setTimeout(res, 2000));
+        // Aguardar Sheets processar o delete granular
+        await new Promise(res=>setTimeout(res, 4000));
         mostrarToastSync('✅ Dados limpos localmente e no Sheets!', 'success');
         if(status) status.textContent='✅ Limpo localmente e no Sheets. Outros dispositivos verão a limpeza ao recarregar.';
       }catch(err){
@@ -3804,37 +3805,52 @@ function initFilialChips(env){
   if(!wrap) return;
 
   // Filiais presentes nos dados
-  const filsNoDado = [...new Set((DB[env]||[]).map(r=>r.Filial).filter(f=>f&&f!=='—'))].sort();
+  let filsNoDado = [...new Set((DB[env]||[]).map(r=>r.Filial).filter(f=>f&&f!=='—'))].sort();
   if(!filsNoDado.length) return;
 
-  // Manter chips fixos: "Todas" e "+ Filial"
-  // Preservar seleção atual
-  const selAtual = new Set([...F[env].filial]);
+  // Restrição por núcleo — filtrar filiais permitidas ao usuário
+  const authFils = window._authFiliais;
+  if(authFils && authFils.length){
+    filsNoDado = filsNoDado.filter(f => authFils.includes(f));
+    // Forçar seleção apenas das filiais permitidas
+    F[env].filial = new Set(filsNoDado);
+  }
 
+  const selAtual = new Set([...F[env].filial]);
   wrap.innerHTML = '';
 
-  // Chip "Todas"
-  const allChip = document.createElement('div');
-  allChip.className = 'chip' + (F[env].filial.has('all') ? ' on-'+env : '');
-  allChip.textContent = 'Todas';
-  allChip.onclick = () => fAllFilial(env, allChip);
-  wrap.appendChild(allChip);
+  // Chip "Todas" — só aparece se não há restrição de filiais
+  if(!authFils || !authFils.length){
+    const allChip = document.createElement('div');
+    allChip.className = 'chip' + (F[env].filial.has('all') ? ' on-'+env : '');
+    allChip.textContent = 'Todas';
+    allChip.onclick = () => fAllFilial(env, allChip);
+    wrap.appendChild(allChip);
+  }
 
   // Chips por filial
   filsNoDado.forEach(f => {
     const c = document.createElement('div');
     c.className = 'chip' + (selAtual.has(f) ? ' on-'+env : '');
     c.textContent = f;
-    c.onclick = () => fTogFilial(env, c, f);
+    // Usuários com restrição não podem desmarcar filiais
+    if(!authFils || !authFils.length){
+      c.onclick = () => fTogFilial(env, c, f);
+    } else {
+      c.style.cursor = 'default';
+      c.title = 'Acesso restrito ao seu núcleo';
+    }
     wrap.appendChild(c);
   });
 
-  // Chip "+ Filial"
-  const addChip = document.createElement('div');
-  addChip.className = 'chip dsh';
-  addChip.textContent = '+ Filial';
-  addChip.onclick = () => addFilial(env);
-  wrap.appendChild(addChip);
+  // Chip "+ Filial" — só para admin/full sem restrição
+  if(!authFils || !authFils.length){
+    const addChip = document.createElement('div');
+    addChip.className = 'chip dsh';
+    addChip.textContent = '+ Filial';
+    addChip.onclick = () => addFilial(env);
+    wrap.appendChild(addChip);
+  }
 
   // Log para console
   console.log(`🏢 Filiais ${env.toUpperCase()} detectadas:`, filsNoDado.join(', '));
@@ -8507,11 +8523,11 @@ const ROLE_LABELS = {
 const DEFAULT_ADMIN = { id:'__admin__', nome:'Administrador', login:'admin', senha:'admin123', role:'admin', filiais:[], modulos:[] };
 
 const BUILTIN_USERS = [
-  { id:'__fabio__',   nome:'Fabio Freitas',  login:'afabio.freitas', senha:'Mudar123', role:'full',    filiais:[], modulos:[] },
-  { id:'__giovane__', nome:'Giovane Silva',  login:'giovane.silva',  senha:'Mudar123', role:'full',    filiais:[], modulos:[] },
-  { id:'__rodrigo__', nome:'Rodrigo Pulgas', login:'rodrigo.pulgas', senha:'Mudar123', role:'full',    filiais:[], modulos:[], primeiroAcesso:true },
-  { id:'__marcelo__', nome:'Marcelo Santos', login:'marcelo.santos', senha:'Mudar123', role:'consult', filiais:[], modulos:[], primeiroAcesso:true },
-  { id:'__arlei__',   nome:'Arlei Bethiol',  login:'arlei.bethiol',  senha:'Mudar123', role:'consult', filiais:[], modulos:[], primeiroAcesso:true },
+  { id:'__fabio__',   nome:'Fabio Freitas',  login:'afabio.freitas', senha:'Mudar123', role:'full',    filiais:[], nucleo:null, modulos:[] },
+  { id:'__giovane__', nome:'Giovane Silva',  login:'giovane.silva',  senha:'Mudar123', role:'full',    filiais:[], nucleo:null, modulos:[] },
+  { id:'__rodrigo__', nome:'Rodrigo Pulgas', login:'rodrigo.pulgas', senha:'Mudar123', role:'full',    filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
+  { id:'__marcelo__', nome:'Marcelo Santos', login:'marcelo.santos', senha:'Mudar123', role:'consult', filiais:['DN SJC','Roseira'],                    nucleo:'Edivaldo', modulos:[], primeiroAcesso:true },
+  { id:'__arlei__',   nome:'Arlei Bethiol',  login:'arlei.bethiol',  senha:'Mudar123', role:'consult', filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
 ];
 
 function authGetUsers(){
@@ -8695,12 +8711,53 @@ function authApplyPermissions(){
   if(av){ av.textContent=u.nome.charAt(0).toUpperCase(); av.style.background=u.role==='admin'?'var(--pur)':u.role==='full'?'var(--mb)':u.role==='consult'?'var(--grn)':u.role==='filial'?'var(--acc)':'var(--ora)'; }
   if(nm) nm.textContent=u.nome.split(' ')[0];
 
-  // Filterbar filial chips: hide filiais not allowed
-  if(u.role==='filial' && u.filiais && u.filiais.length){
-    // Will be applied when filial chips are rendered
+  // Restrição de filiais — aplica para usuários com filiais definidas (qualquer role)
+  if(u.filiais && u.filiais.length > 0){
     window._authFiliais = u.filiais;
+    window._authNucleo  = u.nucleo || null;
+    // Ocultar chips de núcleos não permitidos
+    setTimeout(()=>{
+      ['MB','MC'].forEach(env=>{
+        const wrap = document.getElementById('fNucleo'+env);
+        if(!wrap) return;
+        wrap.querySelectorAll('.chip').forEach(chip=>{
+          const txt = chip.textContent.trim();
+          if(txt==='Todos') { chip.style.display='none'; return; }
+          if(u.nucleo && txt !== u.nucleo){
+            chip.style.display='none';
+          } else {
+            chip.classList.add('on-'+env.toLowerCase());
+          }
+        });
+      });
+    }, 500);
   } else {
     window._authFiliais = null;
+    window._authNucleo  = null;
+  }
+
+  // Aba Estoque — usuários com filiais restritas só veem Cruzamento de Curvas
+  if(u.filiais && u.filiais.length > 0){
+    // Ocultar tabs que não são Cruzamento de Curvas no estoque
+    ['visao','itens','vsfat'].forEach(tab => {
+      ['mb','mc'].forEach(env => {
+        const btn = document.getElementById(`esttab-${tab}-${env}`);
+        if(btn) btn.style.display = 'none';
+      });
+    });
+    // Forçar aba cruzamento como ativa
+    ['mb','mc'].forEach(env => {
+      const btnCruz = document.getElementById(`esttab-cruz-${env}`);
+      if(btnCruz){ btnCruz.classList.add('mb-on'); }
+    });
+  } else {
+    // Admin/full — mostrar todas as tabs
+    ['visao','itens','vsfat','cruz'].forEach(tab => {
+      ['mb','mc'].forEach(env => {
+        const btn = document.getElementById(`esttab-${tab}-${env}`);
+        if(btn) btn.style.display = '';
+      });
+    });
   }
 }
 
@@ -13316,7 +13373,10 @@ async function limparTudoComSheets(env) {
       }
     }
     
-    mostrarToastSync('✅ Dados limpos do navegador e Google Sheets!', 'success');
+    mostrarToastSync('✅ Dados limpos! Aguardando Sheets processar...', 'success');
+    // Aguardar Sheets processar o delete antes de recarregar
+    await new Promise(res => setTimeout(res, 4000));
+    mostrarToastSync('🔄 Recarregando...', 'info');
   } else {
     mostrarToastSync('✅ Dados limpos do navegador!', 'success');
   }
@@ -13324,7 +13384,7 @@ async function limparTudoComSheets(env) {
   // Recarregar página
   setTimeout(() => {
     location.reload();
-  }, 1500);
+  }, 1000);
 }
 
 // ── Função: Limpar apenas ESTOQUE (localStorage + Sheets) ──────
