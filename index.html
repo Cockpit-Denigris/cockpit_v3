@@ -8624,14 +8624,14 @@ function authFirstSetup(){
 
 // ── Hash de senha SHA-256 (SubtleCrypto — nativo no browser) ───
 async function hashSenha(str){
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
-// Hash síncrono simples para comparação offline (fallback)
-function hashSimples(str){
-  let h=0x811c9dc5;
-  for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=(h*0x01000193)>>>0;}
-  return h.toString(16);
+  try{
+    if(typeof crypto !== 'undefined' && crypto.subtle){
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+      return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    }
+  } catch(e){ console.warn('⚠️ crypto.subtle indisponível, usando texto puro'); }
+  // Fallback: retornar texto puro para compatibilidade
+  return str;
 }
 // ────────────────────────────────────────────────────────────────
 
