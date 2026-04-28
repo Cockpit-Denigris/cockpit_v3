@@ -2080,7 +2080,7 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
 
 const SHEETS_CONFIG = {
   apiUrl: 'https://script.google.com/macros/s/AKfycbyNFNMyNfyXqXi5HyrmdZBQtDjGv0Z6Ub7KVmMjCt9eUCt8k_Z2Lbc7kURlIQGTEiMU/exec',
-  token: atob('ZGVOaWdyaXMyMDI0IVNlY3VyZQ=='),  // ofuscado
+  token: 'deNigris2024!Secure',
   enabled: true  // true = usa Sheets, false = usa apenas localStorage
 };
 
@@ -8563,14 +8563,14 @@ const ROLE_LABELS = {
 };
 
 // Default admin user (always present, cannot be deleted)
-const DEFAULT_ADMIN = { id:'__admin__', nome:'Administrador', login:'admin', senha:'240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', role:'admin', filiais:[], modulos:[] };
+const DEFAULT_ADMIN = { id:'__admin__', nome:'Administrador', login:'admin', senha:'admin123', role:'admin', filiais:[], modulos:[] };
 
 const BUILTIN_USERS = [
-  { id:'__fabio__',   nome:'Fabio Freitas',  login:'afabio.freitas', senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'full',    filiais:[], nucleo:null, modulos:[] },
-  { id:'__giovane__', nome:'Giovane Silva',  login:'giovane.silva',  senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'full',    filiais:[], nucleo:null, modulos:[] },
-  { id:'__rodrigo__', nome:'Rodrigo Pulgas', login:'rodrigo.pulgas', senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'full',    filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
-  { id:'__marcelo__', nome:'Marcelo Santos', login:'marcelo.santos', senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'consult', filiais:['DN SJC','Roseira'],                    nucleo:'Edivaldo', modulos:[], primeiroAcesso:true },
-  { id:'__arlei__',   nome:'Arlei Bethiol',  login:'arlei.bethiol',  senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'consult', filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
+  { id:'__fabio__',   nome:'Fabio Freitas',  login:'afabio.freitas', senha:'Mudar123', role:'full',    filiais:[], nucleo:null, modulos:[] },
+  { id:'__giovane__', nome:'Giovane Silva',  login:'giovane.silva',  senha:'Mudar123', role:'full',    filiais:[], nucleo:null, modulos:[] },
+  { id:'__rodrigo__', nome:'Rodrigo Pulgas', login:'rodrigo.pulgas', senha:'Mudar123', role:'full',    filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
+  { id:'__marcelo__', nome:'Marcelo Santos', login:'marcelo.santos', senha:'Mudar123', role:'consult', filiais:['DN SJC','Roseira'],                    nucleo:'Edivaldo', modulos:[], primeiroAcesso:true },
+  { id:'__arlei__',   nome:'Arlei Bethiol',  login:'arlei.bethiol',  senha:'Mudar123', role:'consult', filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
 ];
 
 function authGetUsers(){
@@ -8614,7 +8614,7 @@ function authFirstSetup(){
   if(newPass.length<6){ alert('Senha muito curta. Mínimo 6 caracteres.'); return; }
   const users=authGetAll();
   const admin=users.find(u=>u.id==='__admin__');
-  if(admin){ admin.senha=await hashSenha(newPass); authSaveUsers(users); }
+  if(admin){ admin.senha=newPass; authSaveUsers(users); }
   alert('✅ Senha do administrador configurada!\n\nLogin: admin\nSenha: '+newPass);
   document.getElementById('authUser').value='admin';
   document.getElementById('authPass').value=newPass;
@@ -8635,16 +8635,14 @@ async function hashSenha(str){
 }
 // ────────────────────────────────────────────────────────────────
 
-async function doLogin(){
+function doLogin(){
   const login=document.getElementById('authUser').value.trim().toLowerCase();
   const senha=document.getElementById('authPass').value;
   const err=document.getElementById('authErr');
   err.textContent='';
   if(!login||!senha){ err.textContent='Preencha usuário e senha.'; return; }
   const users=authGetAll();
-  // Comparar senha usando hash SHA-256
-  const senhaHash = await hashSenha(senha);
-  const u=users.find(u=>u.login.toLowerCase()===login && (u.senha===senhaHash || u.senha===senha));
+  const u=users.find(u=>u.login.toLowerCase()===login && u.senha===senha);
   if(!u){ err.textContent='Usuário ou senha incorretos.'; return; }
   _currentUser=u;
   sessionStorage.setItem(SESS_KEY, JSON.stringify({id:u.id}));
@@ -8716,7 +8714,7 @@ function _forcarTrocaSenha(u){
   setTimeout(()=>{ const el=document.getElementById('fa-nova'); if(el) el.focus(); },100);
 }
 
-async function _confirmarPrimeiraSenha(){
+function _confirmarPrimeiraSenha(){
   const nova=(document.getElementById('fa-nova')||{}).value||'';
   const conf=(document.getElementById('fa-conf')||{}).value||'';
   const msg=document.getElementById('fa-msg');
@@ -8726,7 +8724,7 @@ async function _confirmarPrimeiraSenha(){
   const todos=authGetAll();
   const idx=todos.findIndex(x=>x.id===_currentUser.id);
   if(idx>=0){
-    todos[idx].senha=await hashSenha(nova);
+    todos[idx].senha=nova;
     delete todos[idx].primeiroAcesso;
     _currentUser=todos[idx];
     authSaveUsers(todos.filter(u=>u.id!=='__admin__'));
@@ -8980,7 +8978,7 @@ function admRoleChange(){
   document.getElementById('adm-modulo-block').style.display=role==='modulo'?'':'none';
 }
 
-async function admSaveUser(){
+function admSaveUser(){
   const id=document.getElementById('adm-edit-id').value.trim();
   const nome=document.getElementById('adm-nome').value.trim();
   const login=document.getElementById('adm-login').value.trim().toLowerCase();
@@ -9003,11 +9001,10 @@ async function admSaveUser(){
     const idx=users.findIndex(u=>u.id===id);
     if(idx>=0){
       users[idx]={...users[idx], nome, login, role, filiais, modulos};
-      if(senha) users[idx].senha=await hashSenha(senha);
+      if(senha) users[idx].senha=senha;
     }
   } else {
-    const senhaHash = senha ? await hashSenha(senha) : '';
-    users.push({ id:'u_'+Date.now(), nome, login, senha:senhaHash, role, filiais, modulos });
+    users.push({ id:'u_'+Date.now(), nome, login, senha, role, filiais, modulos });
   }
   authSaveUsers(users);
   // Show success feedback
