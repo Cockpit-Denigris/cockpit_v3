@@ -2253,12 +2253,23 @@ async function sincronizarEstoqueComSheets(ambiente) {
       });
       
       // Atualizar EST_DATA
-      EST_DATA[ambiente] = { snapshots };
-      
+      // Reconstruir filialUpdates a partir dos dados (_updatedAt por filial)
+      const filialUpdates = {};
+      Object.values(snapshots).flat().forEach(i=>{
+        if(i.filial && i._updatedAt){
+          // Manter a data mais recente por filial
+          if(!filialUpdates[i.filial] || i._updatedAt > filialUpdates[i.filial]){
+            filialUpdates[i.filial] = i._updatedAt;
+          }
+        }
+      });
+
+      EST_DATA[ambiente] = { snapshots, filialUpdates };
+
       // Salvar no localStorage usando a estrutura completa
       const dadosCompletos = {
-        mb: EST_DATA.mb || { snapshots: {} },
-        mc: EST_DATA.mc || { snapshots: {} }
+        mb: { snapshots: EST_DATA.mb.snapshots, filialUpdates: EST_DATA.mb.filialUpdates||{} },
+        mc: { snapshots: EST_DATA.mc.snapshots, filialUpdates: EST_DATA.mc.filialUpdates||{} }
       };
       localStorage.setItem('dn_est_v2', JSON.stringify(dadosCompletos));
       
@@ -2758,16 +2769,22 @@ function clrExecutar(){
         if(f.ano > 0) filtrosSheets.ano = f.ano;
         if(f.mes > 0) filtrosSheets.mes = f.mes;
 
-        // Determinar tipos a limpar
+        // Determinar tipos a limpar — só inclui o que foi selecionado E tem dados
         const tiposSheets = [];
         if(f.tipos.includes('all')){
-          tiposSheets.push('vendas','estoque','despesas');
+          tiposSheets.push('vendas');
+          // Estoque: só limpa do Sheets se havia dados de estoque
+          const temEstoque = Object.keys(EST_DATA[env]?.snapshots||{}).length > 0 || removedEstSnaps > 0;
+          if(temEstoque) tiposSheets.push('estoque');
+          // Despesas: só limpa do Sheets se havia despesas
+          const temDespesas = Object.keys(DESP_DATA[env]||{}).length > 0;
+          if(temDespesas) tiposSheets.push('despesas');
         } else {
           if(f.tipos.includes('dms')) filtrosSheets.fonte = 'dms';
           else if(f.tipos.includes('dre')) filtrosSheets.fonte = 'dre';
           else if(f.tipos.includes('os')) filtrosSheets.fonte = 'os';
           if(f.tipos.some(t=>['dms','dre','os','orca'].includes(t))) tiposSheets.push('vendas');
-          if(clearEst) tiposSheets.push('estoque');
+          // Estoque e despesas: só se marcado 'all' e com dados
         }
 
         // Deletar granular no Sheets — sem reenviar DB inteiro!
@@ -9099,8 +9116,8 @@ function appInit(){
   document.getElementById('homeAccent').style.color='var(--mb)';
   // Estoque state
   // Sheets é a fonte de verdade — não carregar nada do localStorage
-  EST_DATA.mb = { snapshots:{} };
-  EST_DATA.mc = { snapshots:{} };
+  EST_DATA.mb = { snapshots:{}, filialUpdates:{} };
+  EST_DATA.mc = { snapshots:{}, filialUpdates:{} };
   DESP_DATA.mb = {}; DESP_DATA.mc = {};
   // NÃO chamar loadDespState() — despesas vêm do Sync com Sheets
   initAnoChips('mb'); initFilialChips('mb');
@@ -9326,7 +9343,7 @@ async function _sincronizarTudoDoSheets(){
    EST_DATA[env] = { snapshots: { "YYYY_MM": [items] } }
 ═══════════════════════════════════════════════════════════════ */
 
-const EST_DATA = { mb: { snapshots: {} }, mc: { snapshots: {} } };
+const EST_DATA = { mb: { snapshots: {}, filialUpdates: {} }, mc: { snapshots: {}, filialUpdates: {} } };
 
 // Current drill-down context
 let _estDetItems = [];
@@ -9352,18 +9369,68 @@ function closeEstUpload(env){ document.getElementById(`est-upov-${env}`).classLi
 function renderEstLoadedPeriods(env){
   const wrap=document.getElementById(`est-loaded-${env}`); if(!wrap) return;
   const snap=EST_DATA[env].snapshots;
+  const filialUpdates=EST_DATA[env].filialUpdates||{};
   const keys=Object.keys(snap).sort();
   if(!keys.length){ wrap.innerHTML=''; return; }
-  wrap.innerHTML=`<div style="font-size:10px;color:var(--txt3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">Arquivo carregado:</div>
-    <div style="display:flex;flex-wrap:wrap;gap:5px">${keys.map(k=>{
-      const label = k==='current' ? 'Arquivo atual' : k.replace('_','/');
-      const n=snap[k].length;
-      return `<div style="display:flex;align-items:center;gap:4px;background:var(--card2);border:1px solid var(--brd);border-radius:6px;padding:3px 8px;font-size:11px">
-        <span style="color:var(--mb);font-weight:700">${label}</span>
-        <span style="color:var(--txt3)">${n.toLocaleString('pt-BR')} itens</span>
-        <button onclick="deleteEstPeriodo('${env}','${k}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:0 2px;line-height:1">✕</button>
-      </div>`;
-    }).join('')}</div>`;
+
+  // Agrupar itens por filial para mostrar status individual
+  const filialMap = {};
+  keys.forEach(k=>{
+    (snap[k]||[]).forEach(i=>{
+      if(!filialMap[i.filial]) filialMap[i.filial]={count:0,updatedAt:filialUpdates[i.filial]||null};
+      filialMap[i.filial].count++;
+    });
+  });
+
+  const filiais = Object.keys(filialMap).sort();
+  if(!filiais.length){ wrap.innerHTML=''; return; }
+
+  const fmtDate = iso => {
+    if(!iso) return '—';
+    try{
+      const d=new Date(iso);
+      return `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    }catch{return '—';}
+  };
+
+  const totalItens = filiais.reduce((s,f)=>s+filialMap[f].count,0);
+
+  wrap.innerHTML=`
+    <div style="font-size:10px;color:var(--txt3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">
+      Estoque carregado — ${filiais.length} filial(is) · ${totalItens.toLocaleString('pt-BR')} itens total
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      ${filiais.map(f=>`
+        <div style="display:flex;align-items:center;gap:8px;background:var(--card2);border:1px solid var(--brd);border-radius:6px;padding:4px 10px;font-size:11px">
+          <span style="color:var(--mb);font-weight:700;min-width:90px">${f}</span>
+          <span style="color:var(--txt3)">${filialMap[f].count.toLocaleString('pt-BR')} itens</span>
+          <span style="color:var(--txt3);margin-left:auto;font-size:10px">
+            ${filialMap[f].updatedAt ? '🕐 '+fmtDate(filialMap[f].updatedAt) : ''}
+          </span>
+          <button onclick="deleteEstFilial('${env}','${f}')" title="Remover estoque de ${f}"
+            style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:0 2px;line-height:1">✕</button>
+        </div>`).join('')}
+    </div>`;
+}
+
+// ── Deletar estoque de uma filial específica ─────────────────────
+function deleteEstFilial(env, filial){
+  _admConfirm(
+    `Remover estoque de <strong>${filial}</strong>?`,
+    'Os dados desta filial serão removidos do estoque.',
+    ()=>{
+      const snap=EST_DATA[env].snapshots;
+      Object.keys(snap).forEach(k=>{
+        snap[k]=snap[k].filter(i=>i.filial!==filial);
+        if(!snap[k].length) delete snap[k];
+      });
+      if(EST_DATA[env].filialUpdates) delete EST_DATA[env].filialUpdates[filial];
+      saveEstState();
+      renderEstLoadedPeriods(env);
+      initEstFilters(env);
+      renderEstoque(env);
+    }
+  );
 }
 
 function deleteEstPeriodo(env, key){
@@ -9493,9 +9560,12 @@ function handleEstFile(file, env){
 
       if(!items.length) throw new Error('Nenhum item encontrado. Verifique a aba "Plan 1".');
 
-      // Sempre substitui automaticamente
-      applyEstSnap(env, perioKey, items, true);
+      // Substituir apenas as filiais presentes no arquivo — manter as demais intactas
       const filiais=[...new Set(items.map(i=>i.filial))];
+      const updatedAt = new Date().toISOString();
+      // Adicionar _updatedAt e _filialKey em cada item
+      items.forEach(i=>{ i._updatedAt=updatedAt; });
+      applyEstSnapPorFilial(env, perioKey, items, filiais);
       const totalVal=items.reduce((s,i)=>s+i.valor,0);
       st.textContent=`✅ ${items.length.toLocaleString('pt-BR')} itens carregados`;
       st.style.color='var(--grn)';
@@ -9531,9 +9601,40 @@ function applyEstSnap(env, perioKey, items, replace){
   renderEstLoadedPeriods(env);
 }
 
+// ── Substituir estoque apenas das filiais presentes no arquivo ──
+// Mantém intactas as filiais que não estão no novo arquivo
+function applyEstSnapPorFilial(env, perioKey, items, filiaisNovas){
+  const normalized = items.map(i=>i.tec==='SIM'||i.tec==='NÃO'?i:Object.assign({},i,{tec:_normTec(i.tec)}));
+  const filSet = new Set(filiaisNovas);
+  const snap = EST_DATA[env].snapshots;
+
+  // Remover apenas as filiais do novo arquivo do snapshot atual
+  const existentes = snap[perioKey] || [];
+  const mantidos = existentes.filter(i => !filSet.has(i.filial));
+
+  // Combinar mantidos + novos
+  snap[perioKey] = [...mantidos, ...normalized];
+
+  // Atualizar registro de última atualização por filial
+  if(!EST_DATA[env].filialUpdates) EST_DATA[env].filialUpdates = {};
+  const updatedAt = normalized[0]?._updatedAt || new Date().toISOString();
+  filiaisNovas.forEach(f => { EST_DATA[env].filialUpdates[f] = updatedAt; });
+
+  saveEstState();
+  initEstFilters(env);
+  renderEstoque(env);
+  document.getElementById(`est-up-preview-${env}`).innerHTML='';
+  renderEstLoadedPeriods(env);
+}
+
 // ── Persist ─────────────────────────────────────────────────
 function saveEstState(){
-  try{ localStorage.setItem('dn_est_v2',JSON.stringify({mb:EST_DATA.mb,mc:EST_DATA.mc})); }catch(e){}
+  try{
+    localStorage.setItem('dn_est_v2',JSON.stringify({
+      mb:{snapshots:EST_DATA.mb.snapshots, filialUpdates:EST_DATA.mb.filialUpdates||{}},
+      mc:{snapshots:EST_DATA.mc.snapshots, filialUpdates:EST_DATA.mc.filialUpdates||{}}
+    }));
+  }catch(e){}
   
   // ═══ GOOGLE SHEETS SYNC ═══════════════════════════════════════
   if(window._modoImportacaoAtivo){ console.log('📦 Modo Importação — estoque adiado'); return; }
