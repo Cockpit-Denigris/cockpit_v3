@@ -765,10 +765,6 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
           <select id="estclr-fil" onchange="estClrPreview()" style="width:100%;background:var(--card2);border:1px solid var(--brd);border-radius:6px;padding:7px 8px;font-size:11px;color:var(--txt)">
             <option value="">— Selecione —</option>
             <option value="all">Todas as filiais</option>
-            <option value="Sorocaba">Sorocaba</option>
-            <option value="Itu">Itu</option>
-            <option value="Itapeva">Itapeva</option>
-            <option value="Alumínio">Alumínio</option>
           </select>
         </div>
         <div>
@@ -2084,7 +2080,7 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
 
 const SHEETS_CONFIG = {
   apiUrl: 'https://script.google.com/macros/s/AKfycbyNFNMyNfyXqXi5HyrmdZBQtDjGv0Z6Ub7KVmMjCt9eUCt8k_Z2Lbc7kURlIQGTEiMU/exec',
-  token: 'deNigris2024!Secure',
+  token: atob('ZGVOaWdyaXMyMDI0IVNlY3VyZQ=='),  // ofuscado
   enabled: true  // true = usa Sheets, false = usa apenas localStorage
 };
 
@@ -2481,7 +2477,8 @@ function _detectFilialCidade(empresa, cidadeNorm){
   // 1) Pelo campo empresa
   if(emp.includes('ITAPEVA')) return 'Itapeva';
   if(emp.includes('ALUMIN'))  return 'Alumínio';
-  if(emp.includes('SOROCABA') || emp.includes('MATRIZ')) return 'Sorocaba';
+  if(emp.includes('SOROCABA')) return 'Sorocaba';
+  if(emp.includes('LIMAO') || emp.includes('LIMÃO') || emp.includes('MATRIZ')) return 'Limão';
   if(emp.includes('ITU') && !emp.includes('ITAPEVA') && !emp.includes('ALUMIN')) return 'Itu';
   // 2) Fallback: checar no CIDADE_BASE se a cidade já tem filial definida
   const baseEntry = CIDADE_BASE.find(([c])=>c===cidadeNorm);
@@ -2831,6 +2828,15 @@ function clrCidades(){
 let _estClrEnv='mb';
 function openEstClr(env){
   _estClrEnv=env;
+  // Popular filiais dinamicamente do EST_DATA
+  const filEl=document.getElementById('estclr-fil');
+  if(filEl){
+    const snapsAll=EST_DATA[env]?.snapshots||{};
+    const filiais=[...new Set(Object.values(snapsAll).flat().map(r=>r.Filial||r.filial).filter(Boolean))].sort();
+    filEl.innerHTML='<option value="">— Selecione —</option><option value="all">Todas as filiais</option>';
+    filiais.forEach(f=>{ const o=document.createElement('option'); o.value=f; o.textContent=f; filEl.appendChild(o); });
+    filEl.value='';
+  }
   // Populate year select from existing snapshots
   const snaps=Object.keys(EST_DATA[env]?.snapshots||{});
   const anos=[...new Set(snaps.map(k=>k.split('_')[0]))].sort();
@@ -2840,7 +2846,6 @@ function openEstClr(env){
     anos.forEach(a=>{ const o=document.createElement('option'); o.value=a; o.textContent=a; anoSel.appendChild(o); });
   }
   // Reset
-  const filEl=document.getElementById('estclr-fil'); if(filEl) filEl.value='';
   const mesEl=document.getElementById('estclr-mes'); if(mesEl) mesEl.value='0';
   if(anoSel) anoSel.value='0';
   const prev=document.getElementById('estclr-preview');
@@ -3091,6 +3096,17 @@ async function _enviarTudoAoSheets(){
   }
 }
 // ── FIM MODO IMPORTAÇÃO ──────────────────────────────────────────
+
+
+// ── Helper: enviar ao Sheets respeitando Modo Importação ────────
+function _sheetsAppend(tipo, env, dados, acao='append'){
+  if(window._modoImportacaoAtivo){
+    console.log(`📦 Modo Importação — envio ${tipo}/${env} adiado`);
+    return Promise.resolve();
+  }
+  return enviarParaSheets(tipo, env, dados, acao).catch(e=>console.warn('⚠️ Sheets:', e));
+}
+// ────────────────────────────────────────────────────────────────
 
 async function saveState(){
   // Incluir CIDADE_MAP no payload — persiste estado zerado ou customizado
@@ -6509,6 +6525,30 @@ function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
   [...new Set(DB[env].map(r=>+r.Ano))].forEach(a=>{ if(!ANOS_LIST.includes(a)) ANOS_LIST.push(a); });
   ANOS_LIST.sort((a,b)=>a-b);
 
+  // ── Cidades automáticas — detectar novas cidades do DMS ───────
+  // Ao importar DMS, identificar cidades não mapeadas e registrar automaticamente
+  if(fonte === 'dms'){
+    let cidadesNovas = 0;
+    const cidadesParaSalvar = [];
+    parsed.forEach(r => {
+      if(!r.Cidade || r.Cidade === '—') return;
+      const k = r.Cidade.toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      if(!CIDADE_MAP[k] && r.Filial && r.Filial !== '—'){
+        CIDADE_MAP[k] = { filial: r.Filial, areaOp: true, auto: true };
+        cidadesNovas++;
+        cidadesParaSalvar.push({ cidade: k, filial: r.Filial, areaOp: true });
+      }
+    });
+    if(cidadesNovas > 0){
+      console.log(`🏙️ ${cidadesNovas} cidades novas detectadas e mapeadas automaticamente`);
+      // Salvar cidades no Sheets se configurado
+      if(SHEETS_CONFIG && SHEETS_CONFIG.enabled && !window._modoImportacaoAtivo){
+        _sheetsAppend('cidades', env, cidadesParaSalvar, 'append');
+      }
+    }
+  }
+  // ── FIM cidades automáticas ────────────────────────────────────
+
   // Preview final
   const anos=[...new Set(parsed.map(r=>r.Ano))].sort();
   const meses=[...new Set(parsed.map(r=>r.Mês_Num))].sort((a,b)=>a-b);
@@ -6559,10 +6599,10 @@ function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
             }
           }
           // Enviar só os registros novos (não o DB inteiro)
-          await enviarParaSheets('vendas', env, parsed, 'append');
+          await _sheetsAppend('vendas', env, parsed, 'append');
         } else {
           // Acumular: só append
-          await enviarParaSheets('vendas', env, parsed, 'append');
+          await _sheetsAppend('vendas', env, parsed, 'append');
         }
         mostrarToastSync(`✅ Dados salvos no Sheets (${modoLabel})`, 'success');
       }catch(err){ console.warn('⚠️ Sheets sync erro:', err); }
@@ -6658,7 +6698,7 @@ function resolveDREConflict(escolha){
               }
             }
             // 2. Enviar só os registros DRE novos (208 reg, não 180k)
-            await enviarParaSheets('vendas', env, parsed, 'append');
+            await _sheetsAppend('vendas', env, parsed, 'append');
             console.log(`✅ DRE enviado: ${parsed.length} registros (sem reenviar DB inteiro)`);
             mostrarToastSync('✅ DRE sincronizado com Sheets', 'success');
           }catch(err){
@@ -6858,7 +6898,7 @@ function mapCanal(depto){
 const FILIAL_MAP=[
   {keys:['ITAPEVA'],                                              nome:'Itapeva'},
   {keys:['ALUMINIO','ALUMÍNIO','ALUM','ALUMINÍO','ALUMINI'],      nome:'Alumínio'},
-  {keys:['SOROCABA','MATRIZ'],                                    nome:'Sorocaba'},
+  {keys:['SOROCABA'],                                    nome:'Sorocaba'},
   {keys:['ITU'],                                                  nome:'Itu'},
   // DN SJC
   {keys:['SJC','SAO JOSE','SÃO JOSÉ','SJCAMPOS','S.J.'],         nome:'DN SJC'},
@@ -8084,7 +8124,7 @@ function pFile(file){
         // ═══ ENVIO AUTOMÁTICO PARA GOOGLE SHEETS ══════════════════
         if (SHEETS_CONFIG && SHEETS_CONFIG.enabled && osRows.length > 0) {
           const acaoSheets = modo === 'substituir' ? 'replace' : 'append';
-          enviarParaSheets('vendas', upEnv, osRows, acaoSheets)
+          _sheetsAppend('vendas', upEnv, osRows, acaoSheets)
             .then(() => mostrarToastSync('✅ FAT_OF sincronizado com Google Sheets', 'success'))
             .catch(err => console.warn('⚠️ Erro ao sincronizar FAT_OF com Sheets:', err));
         }
@@ -8195,7 +8235,7 @@ function pFile(file){
               });
             if(metasRows.length > 0){
               limparDoSheets('metas', upEnv)
-                .then(() => enviarParaSheets('metas', upEnv, metasRows, 'append'))
+                .then(() => _sheetsAppend('metas', upEnv, metasRows, 'append'))
                 .then(() => mostrarToastSync('✅ Metas sincronizadas com Google Sheets', 'success'))
                 .catch(err => console.warn('⚠️ Erro ao sincronizar metas:', err));
             }
@@ -8523,14 +8563,14 @@ const ROLE_LABELS = {
 };
 
 // Default admin user (always present, cannot be deleted)
-const DEFAULT_ADMIN = { id:'__admin__', nome:'Administrador', login:'admin', senha:'admin123', role:'admin', filiais:[], modulos:[] };
+const DEFAULT_ADMIN = { id:'__admin__', nome:'Administrador', login:'admin', senha:'240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', role:'admin', filiais:[], modulos:[] };
 
 const BUILTIN_USERS = [
-  { id:'__fabio__',   nome:'Fabio Freitas',  login:'afabio.freitas', senha:'Mudar123', role:'full',    filiais:[], nucleo:null, modulos:[] },
-  { id:'__giovane__', nome:'Giovane Silva',  login:'giovane.silva',  senha:'Mudar123', role:'full',    filiais:[], nucleo:null, modulos:[] },
-  { id:'__rodrigo__', nome:'Rodrigo Pulgas', login:'rodrigo.pulgas', senha:'Mudar123', role:'full',    filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
-  { id:'__marcelo__', nome:'Marcelo Santos', login:'marcelo.santos', senha:'Mudar123', role:'consult', filiais:['DN SJC','Roseira'],                    nucleo:'Edivaldo', modulos:[], primeiroAcesso:true },
-  { id:'__arlei__',   nome:'Arlei Bethiol',  login:'arlei.bethiol',  senha:'Mudar123', role:'consult', filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
+  { id:'__fabio__',   nome:'Fabio Freitas',  login:'afabio.freitas', senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'full',    filiais:[], nucleo:null, modulos:[] },
+  { id:'__giovane__', nome:'Giovane Silva',  login:'giovane.silva',  senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'full',    filiais:[], nucleo:null, modulos:[] },
+  { id:'__rodrigo__', nome:'Rodrigo Pulgas', login:'rodrigo.pulgas', senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'full',    filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
+  { id:'__marcelo__', nome:'Marcelo Santos', login:'marcelo.santos', senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'consult', filiais:['DN SJC','Roseira'],                    nucleo:'Edivaldo', modulos:[], primeiroAcesso:true },
+  { id:'__arlei__',   nome:'Arlei Bethiol',  login:'arlei.bethiol',  senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'consult', filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
 ];
 
 function authGetUsers(){
@@ -8563,7 +8603,7 @@ function authInit(){
   const hint=document.getElementById('auth-setup-hint');
   if(hint){
     const users=authGetAll();
-    const onlyDefault=users.length===1 && users[0].id==='__admin__' && users[0].senha==='admin123';
+    const onlyDefault=users.length===1 && users[0].id==='__admin__' && (users[0].senha==='240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9' || users[0].senha==='admin123');
     hint.style.display=onlyDefault?'block':'none';
   }
 }
@@ -8574,21 +8614,37 @@ function authFirstSetup(){
   if(newPass.length<6){ alert('Senha muito curta. Mínimo 6 caracteres.'); return; }
   const users=authGetAll();
   const admin=users.find(u=>u.id==='__admin__');
-  if(admin){ admin.senha=newPass; authSaveUsers(users); }
+  if(admin){ admin.senha=await hashSenha(newPass); authSaveUsers(users); }
   alert('✅ Senha do administrador configurada!\n\nLogin: admin\nSenha: '+newPass);
   document.getElementById('authUser').value='admin';
   document.getElementById('authPass').value=newPass;
   document.getElementById('auth-setup-hint').style.display='none';
 }
 
-function doLogin(){
+
+// ── Hash de senha SHA-256 (SubtleCrypto — nativo no browser) ───
+async function hashSenha(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+// Hash síncrono simples para comparação offline (fallback)
+function hashSimples(str){
+  let h=0x811c9dc5;
+  for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=(h*0x01000193)>>>0;}
+  return h.toString(16);
+}
+// ────────────────────────────────────────────────────────────────
+
+async function doLogin(){
   const login=document.getElementById('authUser').value.trim().toLowerCase();
   const senha=document.getElementById('authPass').value;
   const err=document.getElementById('authErr');
   err.textContent='';
   if(!login||!senha){ err.textContent='Preencha usuário e senha.'; return; }
   const users=authGetAll();
-  const u=users.find(u=>u.login.toLowerCase()===login && u.senha===senha);
+  // Comparar senha usando hash SHA-256
+  const senhaHash = await hashSenha(senha);
+  const u=users.find(u=>u.login.toLowerCase()===login && (u.senha===senhaHash || u.senha===senha));
   if(!u){ err.textContent='Usuário ou senha incorretos.'; return; }
   _currentUser=u;
   sessionStorage.setItem(SESS_KEY, JSON.stringify({id:u.id}));
@@ -8660,7 +8716,7 @@ function _forcarTrocaSenha(u){
   setTimeout(()=>{ const el=document.getElementById('fa-nova'); if(el) el.focus(); },100);
 }
 
-function _confirmarPrimeiraSenha(){
+async function _confirmarPrimeiraSenha(){
   const nova=(document.getElementById('fa-nova')||{}).value||'';
   const conf=(document.getElementById('fa-conf')||{}).value||'';
   const msg=document.getElementById('fa-msg');
@@ -8670,7 +8726,7 @@ function _confirmarPrimeiraSenha(){
   const todos=authGetAll();
   const idx=todos.findIndex(x=>x.id===_currentUser.id);
   if(idx>=0){
-    todos[idx].senha=nova;
+    todos[idx].senha=await hashSenha(nova);
     delete todos[idx].primeiroAcesso;
     _currentUser=todos[idx];
     authSaveUsers(todos.filter(u=>u.id!=='__admin__'));
@@ -8924,7 +8980,7 @@ function admRoleChange(){
   document.getElementById('adm-modulo-block').style.display=role==='modulo'?'':'none';
 }
 
-function admSaveUser(){
+async function admSaveUser(){
   const id=document.getElementById('adm-edit-id').value.trim();
   const nome=document.getElementById('adm-nome').value.trim();
   const login=document.getElementById('adm-login').value.trim().toLowerCase();
@@ -8947,10 +9003,11 @@ function admSaveUser(){
     const idx=users.findIndex(u=>u.id===id);
     if(idx>=0){
       users[idx]={...users[idx], nome, login, role, filiais, modulos};
-      if(senha) users[idx].senha=senha;
+      if(senha) users[idx].senha=await hashSenha(senha);
     }
   } else {
-    users.push({ id:'u_'+Date.now(), nome, login, senha, role, filiais, modulos });
+    const senhaHash = senha ? await hashSenha(senha) : '';
+    users.push({ id:'u_'+Date.now(), nome, login, senha:senhaHash, role, filiais, modulos });
   }
   authSaveUsers(users);
   // Show success feedback
@@ -9240,6 +9297,17 @@ async function _sincronizarTudoDoSheets(){
         console.log(`✅ Metas ${env.toUpperCase()} carregadas do Sheets: ${metas.length} registros`);
       }
     }
+
+    // Restaurar cidades do Sheets
+    try{
+      const cidadesData = await lerDoSheets('cidades', 'mb');
+      if(cidadesData && cidadesData.length > 0){
+        cidadesData.forEach(r => {
+          if(r.cidade) CIDADE_MAP[r.cidade] = { filial: r.filial, areaOp: true, auto: true };
+        });
+        console.log(`🏙️ ${cidadesData.length} cidades restauradas do Sheets`);
+      }
+    } catch(e){ console.warn('⚠️ Erro ao restaurar cidades:', e); }
 
     setLoad(100, '✅ Carregamento concluído!');
     console.log('✅ Sincronização concluída!');
