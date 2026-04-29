@@ -2122,7 +2122,7 @@ async function enviarParaSheets(tipo, ambiente, dados, acao = 'append', periodo 
       const b = document.createElement('div');
       b.id = 'sheets-sending-badge';
       b.style.cssText = 'position:fixed;bottom:18px;right:18px;z-index:99999;background:#1a3a6b;color:#fff;border-radius:10px;padding:8px 16px;font-size:12px;font-family:monospace;box-shadow:0 4px 16px #0006;display:flex;align-items:center;gap:8px;';
-      b.innerHTML = '<span style="animation:spin 1s linear infinite;display:inline-block">⏳</span> <span id="sheets-badge-txt">Enviando para Sheets...</span><button id="sheets-cancel-btn" onclick="window._sheetsEnvioCancelado=true;this.textContent='Cancelando...';this.disabled=true;">✕ Cancelar</button>';
+      b.innerHTML = `<span style="animation:spin 1s linear infinite;display:inline-block">⏳</span> <span id="sheets-badge-txt">Enviando para Sheets...</span><button id="sheets-cancel-btn" onclick="window._sheetsEnvioCancelado=true;this.textContent='Cancelando...';this.disabled=true;">✕ Cancelar</button>`;
       document.body.appendChild(b);
       return b;
     })();
