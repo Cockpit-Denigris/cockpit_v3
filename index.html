@@ -70,6 +70,9 @@ body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;font
 /* Botões prime (Carregar) nunca bloqueados no Modo Importação */
 .modo-import-ativo .ibtn.prime-mb,
 .modo-import-ativo .ibtn.prime-mc{opacity:1!important;pointer-events:auto!important;}
+/* Badge cancelar envio */
+#sheets-cancel-btn{cursor:pointer;background:rgba(255,80,40,.2);border:1px solid #ff5028;color:#ff5028;border-radius:6px;padding:2px 8px;font-size:11px;margin-left:8px;}
+#sheets-cancel-btn:hover{background:rgba(255,80,40,.4);}
 #btn-modo-import.ativo{background:rgba(255,80,40,.15);color:#ff5028;border-color:#ff502888;}
 
 /* ══ HOME SCREEN ════════════════════════════════ */
@@ -2119,7 +2122,7 @@ async function enviarParaSheets(tipo, ambiente, dados, acao = 'append', periodo 
       const b = document.createElement('div');
       b.id = 'sheets-sending-badge';
       b.style.cssText = 'position:fixed;bottom:18px;right:18px;z-index:99999;background:#1a3a6b;color:#fff;border-radius:10px;padding:8px 16px;font-size:12px;font-family:monospace;box-shadow:0 4px 16px #0006;display:flex;align-items:center;gap:8px;';
-      b.innerHTML = '<span style="animation:spin 1s linear infinite;display:inline-block">⏳</span> <span id="sheets-badge-txt">Enviando para Sheets...</span>';
+      b.innerHTML = '<span style="animation:spin 1s linear infinite;display:inline-block">⏳</span> <span id="sheets-badge-txt">Enviando para Sheets...</span><button id="sheets-cancel-btn" onclick="window._sheetsEnvioCancelado=true;this.textContent='Cancelando...';this.disabled=true;">✕ Cancelar</button>';
       document.body.appendChild(b);
       return b;
     })();
@@ -2140,6 +2143,15 @@ async function enviarParaSheets(tipo, ambiente, dados, acao = 'append', periodo 
         arquivo: window.currentFileName || 'Sem nome',
         usuario: window.currentUser?.nome || 'Sistema'
       };
+
+      // Verificar cancelamento antes de cada lote
+      if(window._sheetsEnvioCancelado){
+        console.warn('⛔ Envio cancelado pelo usuário');
+        const _bc = document.getElementById('sheets-sending-badge');
+        if(_bc){ _bc.innerHTML = '⛔ Envio cancelado'; setTimeout(()=>_bc.remove(), 2000); }
+        window._sheetsEnvioCancelado = false;
+        return { sucesso: false, motivo: 'cancelado' };
+      }
 
       await fetch(SHEETS_CONFIG.apiUrl, {
         method: 'POST',
@@ -2731,7 +2743,8 @@ function clrExecutar(){
         if(!snaps[k].length) delete snaps[k];
       });
     }
-    saveEstState();
+    // Salvar estoque localmente apenas — Sheets será limpo abaixo
+    try{ localStorage.setItem('dn_est_v2',JSON.stringify({mb:{snapshots:EST_DATA.mb.snapshots,filialUpdates:EST_DATA.mb.filialUpdates||{}},mc:{snapshots:EST_DATA.mc.snapshots,filialUpdates:EST_DATA.mc.filialUpdates||{}}})); }catch(e){}
     // Re-inicializar filtros de estoque
     if(Object.keys(EST_DATA[env]?.snapshots||{}).length){
       initEstFilters(env);
@@ -2756,7 +2769,8 @@ function clrExecutar(){
   const mesEl=document.getElementById('clr-mes'); if(mesEl) mesEl.value='0';
   const anoEl=document.getElementById('clr-ano'); if(anoEl) anoEl.value='0';
 
-  saveState();
+  // Salvar localmente SEM reenviar ao Sheets — limparDoSheets abaixo cuida do Sheets
+  _saveStateLocalOnly();
   renderAll(env);
   
   // ═══ LIMPAR DO GOOGLE SHEETS — GRANULAR ════════════════════════
@@ -3043,6 +3057,7 @@ function _setSaveIndicator(txt,col,fade){
 // ── MODO IMPORTAÇÃO ─────────────────────────────────────────────
 // Quando ativo: pausa envio automático ao Sheets. Ao desativar, envia tudo de uma vez.
 window._modoImportacaoAtivo = false;
+window._sheetsEnvioCancelado = false; // flag para cancelar envio em andamento
 
 function toggleModoImportacao(){
   const btn = document.getElementById('btn-modo-import');
@@ -3057,12 +3072,39 @@ function toggleModoImportacao(){
     mostrarToastSync('📦 Modo Importação ATIVO — envio ao Sheets pausado. Clique novamente ao terminar todas as importações.', 'info');
     console.log('📦 Modo Importação ativado — envio ao Sheets pausado');
   } else {
+    // Confirmação com resumo do banco antes de enviar
+    const totalVendas = [...(DB.mb||[]),...(DB.mc||[])].length;
+    const totalMetas  = Object.keys(METAS||{}).length;
+    const totalEst    = Object.values(EST_DATA.mb?.snapshots||{}).flat().length + Object.values(EST_DATA.mc?.snapshots||{}).flat().length;
+    const filiais     = [...new Set([...(DB.mb||[]),...(DB.mc||[])].map(r=>r.Filial).filter(Boolean))].sort().join(', ');
+
+    const confirmar = confirm(
+      `📦 Finalizar Modo Importação e enviar ao Sheets?
+
+` +
+      `📊 Vendas: ${totalVendas.toLocaleString('pt-BR')} registros
+` +
+      `🎯 Metas: ${totalMetas.toLocaleString('pt-BR')} entradas
+` +
+      `📦 Estoque: ${totalEst.toLocaleString('pt-BR')} itens
+` +
+      `🏢 Filiais: ${filiais||'—'}
+
+` +
+      `Confirma o envio?`
+    );
+
+    if(!confirmar){
+      // Mantém modo ativo
+      window._modoImportacaoAtivo = true;
+      return;
+    }
+
     btn.textContent = '📦 Modo Importação';
     btn.classList.remove('ativo');
     if(navbar) navbar.classList.remove('modo-import-ativo');
-    // Ao desativar, envia tudo de uma vez
     mostrarToastSync('⬆ Enviando todos os dados ao Sheets...', 'info');
-    console.log('📦 Modo Importação desativado — iniciando envio completo ao Sheets');
+    console.log('📦 Modo Importação desativado — iniciando envio completo');
     _enviarTudoAoSheets();
   }
 }
@@ -3124,6 +3166,19 @@ function _sheetsAppend(tipo, env, dados, acao='append'){
   return enviarParaSheets(tipo, env, dados, acao).catch(e=>console.warn('⚠️ Sheets:', e));
 }
 // ────────────────────────────────────────────────────────────────
+
+// Salvar apenas localmente — sem enviar ao Sheets (usado após Sync para evitar loop)
+async function _saveStateLocalOnly(){
+  const cidadeMapData = Object.keys(CIDADE_MAP).length > 0 ? CIDADE_MAP : '__EMPTY__';
+  const payload=JSON.stringify({DB,METAS,ts:Date.now(),CIDADE_MAP:cidadeMapData});
+  try{ localStorage.setItem(LS_KEY, payload); }catch(e){}
+  try{
+    localStorage.setItem('dn_est_v2',JSON.stringify({
+      mb:{snapshots:EST_DATA.mb.snapshots, filialUpdates:EST_DATA.mb.filialUpdates||{}},
+      mc:{snapshots:EST_DATA.mc.snapshots, filialUpdates:EST_DATA.mc.filialUpdates||{}}
+    }));
+  }catch(e){}
+}
 
 async function saveState(){
   // Incluir CIDADE_MAP no payload — persiste estado zerado ou customizado
@@ -9262,7 +9317,8 @@ async function _sincronizarTudoDoSheets(){
 
     // Salvar no IDB (suporta volumes grandes, sem limite de cota)
     if(vendasMB?.length || vendasMC?.length){
-      saveState().catch(e => console.warn('⚠️ saveState após sync:', e));
+      // Salvar localmente SEM reenviar ao Sheets (evita loop Sync→saveState→Sheets→Sync)
+      _saveStateLocalOnly().catch(e => console.warn('⚠️ saveState após sync:', e));
     }
 
     // ── Estoque MB e MC ────────────────────────────────────────
