@@ -6626,8 +6626,11 @@ function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
     DB[env]=[...DB[env],...parsed];
   }
 
-  // ── DEDUPLICAÇÃO: remover registros já existentes antes de adicionar ──
+  // ── DEDUPLICAÇÃO LOCAL: remover registros já existentes no banco local ──
   // Chave única: Nr_OS + Filial + Data (evita duplicatas ao importar mesmo arquivo 2x)
+  // IMPORTANTE: guardar parsed original para envio ao Sheets ANTES de deduplicar
+  const parsedParaSheets = [...parsed]; // cópia para envio ao Sheets
+
   if(modo === 'acumular' || modo === 'novo'){
     const existingKeys = new Set(
       DB[env].map(r => `${r.Nr_OS||''}|${r.Filial||''}|${r.Data||''}|${r._fonte||''}`)
@@ -6638,9 +6641,9 @@ function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
       return !existingKeys.has(key);
     });
     const duplicatas = antes - parsed.length;
-    if(duplicatas > 0) console.log(`🔄 Deduplicação: ${duplicatas} registros duplicados ignorados`);
+    if(duplicatas > 0) console.log(`🔄 Deduplicação local: ${duplicatas} registros já existentes no banco ignorados`);
   }
-  // ── FIM DEDUPLICAÇÃO ──────────────────────────────────────────
+  // ── FIM DEDUPLICAÇÃO LOCAL ────────────────────────────────────
 
   // Anos dinâmicos
   [...new Set(DB[env].map(r=>+r.Ano))].forEach(a=>{ if(!ANOS_LIST.includes(a)) ANOS_LIST.push(a); });
@@ -6719,11 +6722,11 @@ function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
               }
             }
           }
-          // Enviar só os registros novos (não o DB inteiro)
-          await _sheetsAppend('vendas', env, parsed, 'append');
+          // Enviar registros originais ao Sheets (antes da dedup local)
+          await _sheetsAppend('vendas', env, parsedParaSheets, 'append');
         } else {
-          // Acumular: só append
-          await _sheetsAppend('vendas', env, parsed, 'append');
+          // Acumular: enviar originais ao Sheets
+          await _sheetsAppend('vendas', env, parsedParaSheets, 'append');
         }
         mostrarToastSync(`✅ Dados salvos no Sheets (${modoLabel})`, 'success');
       }catch(err){ console.warn('⚠️ Sheets sync erro:', err); }
