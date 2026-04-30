@@ -710,11 +710,7 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
     <div id="home-user-info" style="font-size:12px;color:var(--txt3)"></div>
     <button class="ibtn" id="home-logout-btn" onclick="doLogout()" style="display:none;font-size:11px">↩ Sair</button>
   </div>
-  <div id="home-migrate-hint" style="display:none;margin-top:16px;background:rgba(255,184,0,.08);border:1px solid rgba(255,184,0,.3);border-radius:10px;padding:12px 20px;font-size:11px;color:var(--acc);text-align:center;max-width:500px">
-    💡 <strong>Arquivo novo detectado</strong> · Os dados do arquivo anterior não migram automaticamente.<br>
-    No arquivo anterior clique em <strong>⬇ Exportar Dados</strong>, depois aqui em <strong>⬆ Importar</strong> para restaurar tudo.
-    <div style="margin-top:8px"><button class="ibtn" onclick="importData()" style="color:var(--acc);border-color:var(--acc)44;font-size:11px">⬆ Importar Dados</button></div>
-  </div>
+
   <div style="margin-top:32px;font-size:10px;color:var(--txt3);letter-spacing:.5px">
     Desenvolvido por <strong style="color:var(--txt2)">Rodrigo Pugas</strong>
   </div>
@@ -3201,12 +3197,8 @@ async function _enviarTudoAoSheets(){
 // ── Helper: enviar ao Sheets respeitando Modo Importação ────────
 function _sheetsAppend(tipo, env, dados, acao='append'){
   if(window._modoImportacaoAtivo){
-    // Acumular apenas dados novos desta sessão
-    if(tipo === 'vendas'){
-      if(env === 'mb') window._sessaoImportMB.push(...dados);
-      else if(env === 'mc') window._sessaoImportMC.push(...dados);
-    }
-    console.log(`📦 Modo Importação — ${dados.length} registros de ${tipo}/${env} acumulados (total sessão MB:${window._sessaoImportMB.length} MC:${window._sessaoImportMC.length})`);
+    // Dados já acumulados de forma síncrona em aplicarParsed
+    console.log(`📦 Modo Importação ativo — envio ${tipo}/${env} adiado`);
     return Promise.resolve();
   }
   return enviarParaSheets(tipo, env, dados, acao).catch(e=>console.warn('⚠️ Sheets:', e));
@@ -5126,6 +5118,22 @@ function renderTblInd(env,rows){
 function renderCanais(env,rows){
   const cans=env==='mb'?['Telepeças/Balcão','Oficina/Funilaria']:['Atacado/Grandes Contas','Varejo/Balcão'];
   const ids=env==='mb'?[['tele','blu'],['ofic','ora']]:[['atac','mc'],['var','cya']];
+  // Destruir gráfico anterior se DB vazio
+  if(!DB[env] || DB[env].length === 0){
+    const chId = 'c-'+env+'-canais';
+    if(_ch[chId]){ _ch[chId].destroy(); delete _ch[chId]; }
+    const el = document.getElementById(chId);
+    if(el){ const ctx=el.getContext('2d'); ctx.clearRect(0,0,el.width,el.height); }
+    ids.forEach(([cid])=>{
+      const ep=document.getElementById(`cpct-${cid}-${env}`);
+      const ev=document.getElementById(`cval-${cid}-${env}`);
+      const eb=document.getElementById(`cbar-${cid}-${env}`);
+      if(ep)ep.textContent='0%';
+      if(ev)ev.textContent='R$ 0';
+      if(eb)eb.style.width='0%';
+    });
+    return;
+  }
   // Participação sempre sobre todos os canais (sem filtro de depto)
   // DRE tem prioridade: para cada filial|ano|mes com DRE, descarta linhas DMS
   const rowsFull=applyDREPriority(DB[env].filter(r=>{
@@ -6704,6 +6712,14 @@ function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
   saveState();
   renderAll(env);
   
+  // ── Acumular para Modo Importação (síncrono, antes do async) ──
+  if(window._modoImportacaoAtivo && parsedParaSheets.length > 0){
+    if(env === 'mb') window._sessaoImportMB.push(...parsedParaSheets);
+    else if(env === 'mc') window._sessaoImportMC.push(...parsedParaSheets);
+    console.log(`📦 Acumulado para Sheets: ${parsedParaSheets.length} registros ${env.toUpperCase()} (total MB:${window._sessaoImportMB.length} MC:${window._sessaoImportMC.length})`);
+  }
+  // ── FIM acumulador ────────────────────────────────────────────
+
   // ═══ SINCRONIZAR COM GOOGLE SHEETS ═════════════════════════════
   if (SHEETS_CONFIG && SHEETS_CONFIG.enabled && parsed.length > 0) {
     (async ()=>{
@@ -9232,10 +9248,7 @@ function appInit(){
   initOsChecks();
   initSegChecks();
 
-  // Show migration hint if no data at all (fresh file)
-  const hint=document.getElementById('home-migrate-hint');
   const hasAny=DB.mb.length||DB.mc.length||Object.keys(EST_DATA.mb.snapshots||{}).length;
-  if(hint && !hasAny){ hint.style.display='block'; }
 
   // ═══ DADOS: carrega do IndexedDB/localStorage (principal) ══════
   // SEMPRE buscar do Sheets ao abrir — garante que todos os dispositivos
@@ -9297,7 +9310,7 @@ async function _sincronizarTudoDoSheets(){
   EST_DATA.mb = { snapshots:{} }; EST_DATA.mc = { snapshots:{} };
   Object.keys(METAS).forEach(k => delete METAS[k]);
   // Mostrar loading screen visível na home enquanto busca do Sheets
-  const homeLoadEl = document.getElementById('home-migrate-hint');
+  const homeLoadEl = null; // hint removido
   const loadScreen = document.createElement('div');
   loadScreen.id = 'gs-loading-screen';
   loadScreen.style.cssText = `position:fixed;inset:0;z-index:99998;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px`;
@@ -9342,7 +9355,12 @@ async function _sincronizarTudoDoSheets(){
       const filsMB=[...new Set(DB.mb.map(r=>r.Filial))].sort();
       console.log(`✅ Vendas MB: ${DB.mb.length} registros | Filiais: ${filsMB.join(', ')} | OS: ${DB.mb.filter(r=>r._fonte==='os').length}`);
     } else {
-      console.warn('⚠️ Vendas MB: sem dados no Sheets');
+      console.warn('⚠️ Vendas MB: sem dados no Sheets — zerando banco local');
+      DB.mb = [];
+      ANOS_LIST.length = 0;
+      initAnoChips('mb'); initFilialChips('mb');
+      renderStatusStrip('mb');
+      renderAll('mb');
       setLoad(35, '⚠️ MB: sem dados no Sheets');
     }
 
@@ -9364,14 +9382,16 @@ async function _sincronizarTudoDoSheets(){
       const filsMC=[...new Set(DB.mc.map(r=>r.Filial))].sort();
       console.log(`✅ Vendas MC: ${DB.mc.length} registros | Filiais: ${filsMC.join(', ')}`);
     } else {
-      console.warn('⚠️ Vendas MC: sem dados no Sheets');
+      console.warn('⚠️ Vendas MC: sem dados no Sheets — zerando banco local');
+      DB.mc = [];
+      initAnoChips('mc'); initFilialChips('mc');
+      renderStatusStrip('mc');
+      renderAll('mc');
     }
 
     // Salvar no IDB (suporta volumes grandes, sem limite de cota)
-    if(vendasMB?.length || vendasMC?.length){
-      // Salvar localmente SEM reenviar ao Sheets (evita loop Sync→saveState→Sheets→Sync)
-      _saveStateLocalOnly().catch(e => console.warn('⚠️ saveState após sync:', e));
-    }
+    // Sempre salvar — mesmo quando vazio, para limpar o cache local
+    _saveStateLocalOnly().catch(e => console.warn('⚠️ saveState após sync:', e));
 
     // ── Estoque MB e MC ────────────────────────────────────────
     setLoad(65, '📦 Buscando estoque…');
