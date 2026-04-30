@@ -3081,6 +3081,8 @@ function _setSaveIndicator(txt,col,fade){
 // Quando ativo: pausa envio automático ao Sheets. Ao desativar, envia tudo de uma vez.
 window._modoImportacaoAtivo = false;
 window._sheetsEnvioCancelado = false; // flag para cancelar envio em andamento
+window._sessaoImportMB = []; // dados novos importados nesta sessão MB
+window._sessaoImportMC = []; // dados novos importados nesta sessão MC
 
 function toggleModoImportacao(){
   const btn = document.getElementById('btn-modo-import');
@@ -3088,6 +3090,9 @@ function toggleModoImportacao(){
   window._modoImportacaoAtivo = !window._modoImportacaoAtivo;
 
   if(window._modoImportacaoAtivo){
+    // Zerar acumuladores da sessão ao ativar
+    window._sessaoImportMB = [];
+    window._sessaoImportMC = [];
     btn.textContent = '🔴 Finalizando Importação';
     btn.classList.add('ativo');
     if(navbar) navbar.classList.add('modo-import-ativo');
@@ -3133,11 +3138,21 @@ function toggleModoImportacao(){
 }
 
 async function _enviarTudoAoSheets(){
-  const todos = [...(DB.mb||[]), ...(DB.mc||[])].filter(r => r && r.Filial);
+  // Enviar APENAS os dados novos desta sessão — não o DB inteiro
+  // Isso evita duplicatas quando o Sheets já tem dados de sessões anteriores
+  const novosMB = window._sessaoImportMB || [];
+  const novosMC = window._sessaoImportMC || [];
+  const todos = [...novosMB, ...novosMC];
+
+  if(todos.length === 0){
+    mostrarToastSync('⚠ Nenhum dado novo para enviar.', 'warning');
+    return;
+  }
+
   try {
     mostrarToastSync('⬆ Enviando vendas ao Sheets...', 'info');
-    if((DB.mb||[]).length > 0) await enviarParaSheets('vendas', 'mb', DB.mb, 'append');
-    if((DB.mc||[]).length > 0) await enviarParaSheets('vendas', 'mc', DB.mc, 'append');
+    if(novosMB.length > 0) await enviarParaSheets('vendas', 'mb', novosMB, 'append');
+    if(novosMC.length > 0) await enviarParaSheets('vendas', 'mc', novosMC, 'append');
 
     // Estoque
     for(const env of ['mb','mc']){
@@ -3171,8 +3186,11 @@ async function _enviarTudoAoSheets(){
       }
     }
 
-    mostrarToastSync(`✅ Tudo enviado ao Sheets! (${todos.length.toLocaleString('pt-BR')} registros de vendas)`, 'success');
-    console.log(`✅ Envio completo: ${todos.length} registros de vendas + estoque + despesas`);
+    mostrarToastSync(`✅ Tudo enviado ao Sheets! (${todos.length.toLocaleString('pt-BR')} registros novos)`, 'success');
+    console.log(`✅ Envio completo: ${todos.length} registros novos (MB:${novosMB.length} MC:${novosMC.length})`);
+    // Limpar acumuladores após envio bem sucedido
+    window._sessaoImportMB = [];
+    window._sessaoImportMC = [];
   } catch(e) {
     mostrarToastSync('❌ Erro ao enviar ao Sheets: ' + e.message, 'error');
   }
@@ -3183,7 +3201,12 @@ async function _enviarTudoAoSheets(){
 // ── Helper: enviar ao Sheets respeitando Modo Importação ────────
 function _sheetsAppend(tipo, env, dados, acao='append'){
   if(window._modoImportacaoAtivo){
-    console.log(`📦 Modo Importação — envio ${tipo}/${env} adiado`);
+    // Acumular apenas dados novos desta sessão
+    if(tipo === 'vendas'){
+      if(env === 'mb') window._sessaoImportMB.push(...dados);
+      else if(env === 'mc') window._sessaoImportMC.push(...dados);
+    }
+    console.log(`📦 Modo Importação — ${dados.length} registros de ${tipo}/${env} acumulados (total sessão MB:${window._sessaoImportMB.length} MC:${window._sessaoImportMC.length})`);
     return Promise.resolve();
   }
   return enviarParaSheets(tipo, env, dados, acao).catch(e=>console.warn('⚠️ Sheets:', e));
