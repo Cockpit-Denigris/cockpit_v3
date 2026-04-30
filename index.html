@@ -3212,21 +3212,8 @@ async function saveState(){
   const hm=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   
   // ═══ GOOGLE SHEETS SYNC ═══════════════════════════════════════
-  if (SHEETS_CONFIG && SHEETS_CONFIG.enabled && DB && Object.keys(DB).length > 0) {
-    if(window._modoImportacaoAtivo){
-      // Modo Importação ativo — não envia agora, vai enviar tudo ao final
-      console.log('📦 Modo Importação ativo — envio ao Sheets adiado');
-    } else {
-      // Envio normal em background
-      const dadosVendas = [...(DB.mb||[]), ...(DB.mc||[])].filter(r => r && r.Filial);
-      if (dadosVendas.length > 0) {
-        enviarParaSheets('vendas', 'mb', DB.mb||[], 'append')
-          .catch(err => console.warn('⚠️ Erro MB:', err));
-        enviarParaSheets('vendas', 'mc', DB.mc||[], 'append')
-          .catch(err => console.warn('⚠️ Erro MC:', err));
-      }
-    }
-  }
+  // saveState é APENAS local — os parsers individuais enviam ao Sheets via _sheetsAppend
+  // Isso evita duplicatas (saveState enviava o DB inteiro a cada importação)
   // ══════════════════════════════════════════════════════════════
   
   // Try localStorage first (fast, synchronous)
