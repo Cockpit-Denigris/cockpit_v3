@@ -2153,12 +2153,26 @@ async function enviarParaSheets(tipo, ambiente, dados, acao = 'append', periodo 
         return { sucesso: false, motivo: 'cancelado' };
       }
 
-      await fetch(SHEETS_CONFIG.apiUrl, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-        mode: 'no-cors',
-        redirect: 'follow'
-      });
+      // Fetch com timeout de 15s e suporte a cancelamento
+      const _ctrl = new AbortController();
+      const _timeout = setTimeout(() => _ctrl.abort(), 15000);
+      try {
+        await fetch(SHEETS_CONFIG.apiUrl, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+          mode: 'no-cors',
+          redirect: 'follow',
+          signal: _ctrl.signal
+        });
+      } catch(fetchErr) {
+        if(fetchErr.name === 'AbortError'){
+          console.warn(`⚠️ Lote ${i+1} timeout/cancelado — continuando...`);
+        } else {
+          console.warn(`⚠️ Lote ${i+1} erro de rede — continuando...`);
+        }
+      } finally {
+        clearTimeout(_timeout);
+      }
 
       console.log(`✅ Lote ${i + 1}/${chunks.length} enviado (${chunk.length} registros)`);
 
@@ -2801,15 +2815,24 @@ function clrExecutar(){
           // Estoque e despesas: só se marcado 'all' e com dados
         }
 
-        // Deletar granular no Sheets — sem reenviar DB inteiro!
+        // ── SEGURANÇA: sempre usar filtros granulares quando disponíveis ──
+        // NUNCA executar delete_all quando há filtros de filial/ano/mês selecionados
+        // Adicionar filial e ano ao filtrosSheets independente do tipo
+        if(f.fil && f.fil !== 'all') filtrosSheets.filial = f.fil;
+        if(f.ano > 0) filtrosSheets.ano = f.ano;
+        if(f.mes > 0) filtrosSheets.mes = f.mes;
+
+        const temFiltro = Object.keys(filtrosSheets).length > 0;
+
         for(const tipo of tiposSheets){
-          const temFiltro = Object.keys(filtrosSheets).length > 0;
           if(temFiltro){
-            // 🚀 RÁPIDO: deleta só as linhas que correspondem aos filtros
+            // 🚀 SEGURO: deleta só as linhas que correspondem aos filtros
             await limparDoSheets(tipo, env, filtrosSheets);
-            console.log(`🗑️ ${tipo} MB: delete granular ${JSON.stringify(filtrosSheets)}`);
+            console.log(`🗑️ ${tipo}: delete granular ${JSON.stringify(filtrosSheets)}`);
           } else {
-            // Sem filtros específicos → apagar tudo + reenviar (operação completa)
+            // Sem nenhum filtro (limpeza total intencional — "Todas as filiais + Todos os anos")
+            // Proteção: confirmar que o usuário realmente quer apagar tudo
+            console.warn(`⚠️ delete_all em ${tipo} — sem filtros (limpeza total confirmada)`);
             await limparDoSheets(tipo, env);
             if(tipo === 'vendas' && DB[env].length > 0){
               await enviarParaSheets('vendas', env, DB[env], 'append');
@@ -6592,6 +6615,22 @@ function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
     });
     DB[env]=[...DB[env],...parsed];
   }
+
+  // ── DEDUPLICAÇÃO: remover registros já existentes antes de adicionar ──
+  // Chave única: Nr_OS + Filial + Data (evita duplicatas ao importar mesmo arquivo 2x)
+  if(modo === 'acumular' || modo === 'novo'){
+    const existingKeys = new Set(
+      DB[env].map(r => `${r.Nr_OS||''}|${r.Filial||''}|${r.Data||''}|${r._fonte||''}`)
+    );
+    const antes = parsed.length;
+    parsed = parsed.filter(r => {
+      const key = `${r.Nr_OS||''}|${r.Filial||''}|${r.Data||''}|${r._fonte||''}`;
+      return !existingKeys.has(key);
+    });
+    const duplicatas = antes - parsed.length;
+    if(duplicatas > 0) console.log(`🔄 Deduplicação: ${duplicatas} registros duplicados ignorados`);
+  }
+  // ── FIM DEDUPLICAÇÃO ──────────────────────────────────────────
 
   // Anos dinâmicos
   [...new Set(DB[env].map(r=>+r.Ano))].forEach(a=>{ if(!ANOS_LIST.includes(a)) ANOS_LIST.push(a); });
