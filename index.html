@@ -1,3 +1,4 @@
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.0 | Gerado em: 01/05/2026 -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -6721,6 +6722,13 @@ function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
   saveState();
   renderAll(env);
   
+  // ── Garantir _fonte em todos os registros ──────────────────────
+  // Se algum registro vier sem _fonte, atribuir automaticamente pelo tipo
+  const fonteAuto = tipo === 'dre' ? 'dre' : tipo === 'os' ? 'os' : tipo === 'orca' ? 'orca' : 'dms';
+  parsed.forEach(r => { if(!r._fonte) r._fonte = fonteAuto; });
+  parsedParaSheets.forEach(r => { if(!r._fonte) r._fonte = fonteAuto; });
+  // ── FIM _fonte automático ─────────────────────────────────────
+
   // ── Acumular para Modo Importação (síncrono, antes do async) ──
   if(window._modoImportacaoAtivo && parsedParaSheets.length > 0){
     if(env === 'mb') window._sessaoImportMB.push(...parsedParaSheets);
