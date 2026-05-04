@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.3 | Gerado em: 04/05/2026 -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.4 | Gerado em: 04/05/2026 -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -8385,7 +8385,7 @@ function pFile(file){
                 return { _key:k, filial:fil, indicador:ind, canal, ano:+ano, mes:+mes, valor:+v };
               });
             if(metasRows.length > 0){
-              await limparDoSheets('metas', upEnv)
+              limparDoSheets('metas', upEnv)
                 .then(() => _sheetsAppend('metas', upEnv, metasRows, 'append'))
                 .then(() => mostrarToastSync('✅ Metas sincronizadas com Google Sheets', 'success'))
                 .catch(err => console.warn('⚠️ Erro ao sincronizar metas:', err));
