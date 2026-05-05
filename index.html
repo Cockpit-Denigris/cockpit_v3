@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.4 | Gerado em: 04/05/2026 -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.5 | Gerado em: 04/05/2026 -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -7827,10 +7827,18 @@ function parseDRESheetNovo(sh, env){
     const custo_tot = custo_tele + custo_ofic + custo_funil + ajuste_inv;
     // Lucro Bruto = Fat.Liq - Custo Total
     const lb_r = fat_liq_calc - custo_tot;
-    // Total Despesas: tentar ler valor calculado, fallback somar despesas diretas
-    // Ler as despesas diretas: L17-L23 (vendas), L25-L34 (pessoal), L36-L54 (funcionamento)
+    // Total Despesas: buscar pelo label "Total Despesas" na coluna de labels
+    // Evita somar subtotais intermediários que causariam duplicação
     let total_desp = 0;
-    for(let r2 = 16; r2 <= 55; r2++) total_desp += rowVal(r2, c); // L17-L56 (0-based: 16-55)
+    const labelCol = _isNovoFormato ? 1 : 0; // col B=TIPO no novo formato, col A no antigo
+    // Procurar linha com "Total Despesas" entre L17 e L60 (idx 16-59)
+    for(let r2 = 16; r2 <= 59; r2++){
+      const lbl = String((aoa[r2]||[])[labelCol]||'').replace(/^'+/,'').trim().toUpperCase();
+      if(lbl.includes('TOTAL') && lbl.includes('DESP')){
+        total_desp = rowVal(r2, c);
+        break;
+      }
+    }
     // Resultado Departamental = Lucro Bruto - Total Despesas
     const rd = lb_r - total_desp;
     // Dias Estoque = (Estoque / Custo Total) * 30
