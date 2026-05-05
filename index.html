@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.10 | Gerado em: 05/05/2026 | Fix1: hdrPecas idx2 | Fix2: metas sheets granular por filial | Fix3: OS sempre append no Sheets | Fix4: upload múltiplos arquivos fila sequencial -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.11 | Gerado em: 05/05/2026 | Fix1: hdrPecas idx2 | Fix2: metas sheets granular por filial | Fix3: OS sempre append no Sheets | Fix4: upload múltiplos arquivos fila sequencial | Fix5: normalizar tipos numéricos ao carregar do Sheets (DRE sumia) -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -9385,7 +9385,16 @@ async function _sincronizarTudoDoSheets(){
     const vendasMB = await lerDoSheets('vendas', 'mb');
     if(vendasMB && vendasMB.length > 0){
       setLoad(35, `✅ MB: ${vendasMB.length.toLocaleString('pt-BR')} registros — processando…`);
-      DB.mb = vendasMB;
+      // ✅ FIX 5: normalizar tipos numéricos vindos do Sheets (chegam como string)
+      // Sem isso, Mês_Num==="2" !== 2 e os registros DRE somem dos cálculos
+      const CAMPOS_NUM = ['Mês_Num','Ano','Fat_Real','Fat_Liq','RB_Real','LB_Real_R','LB_Real_Pct',
+        'RD_Real_R','RD_Real_Pct','Bon_Real','Custo','Qtde','Fat_Bruto','Qtd_OS',
+        'RLB_Real_Pct','LB_Plan_Pct','RD_Plan_Pct'];
+      DB.mb = vendasMB.map(r => {
+        const n = Object.assign({}, r);
+        CAMPOS_NUM.forEach(c => { if(n[c] !== undefined && n[c] !== '') n[c] = +n[c] || 0; });
+        return n;
+      });
       syncOsTypes(DB.mb);
       syncOSFromFile(DB.mb);
       syncSegmentos(DB.mb);
@@ -9414,7 +9423,15 @@ async function _sincronizarTudoDoSheets(){
     const vendasMC = await lerDoSheets('vendas', 'mc');
     if(vendasMC && vendasMC.length > 0){
       setLoad(58, `✅ MC: ${vendasMC.length.toLocaleString('pt-BR')} registros — processando…`);
-      DB.mc = vendasMC;
+      // ✅ FIX 5: normalizar tipos numéricos (MC)
+      const CAMPOS_NUM = ['Mês_Num','Ano','Fat_Real','Fat_Liq','RB_Real','LB_Real_R','LB_Real_Pct',
+        'RD_Real_R','RD_Real_Pct','Bon_Real','Custo','Qtde','Fat_Bruto','Qtd_OS',
+        'RLB_Real_Pct','LB_Plan_Pct','RD_Plan_Pct'];
+      DB.mc = vendasMC.map(r => {
+        const n = Object.assign({}, r);
+        CAMPOS_NUM.forEach(c => { if(n[c] !== undefined && n[c] !== '') n[c] = +n[c] || 0; });
+        return n;
+      });
       syncOsTypes(DB.mc);
       syncOSFromFile(DB.mc);
       syncSegmentos(DB.mc);
