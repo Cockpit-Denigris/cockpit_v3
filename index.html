@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.8 | Gerado em: 05/05/2026 -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.9 | Gerado em: 05/05/2026 -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -12291,7 +12291,8 @@ async function _syncDespFilialPeriodo(env, filial, amKey){
   }));
   try{
     // Delete granular apenas dessa filial/período antes de enviar
-    await limparDoSheets('despesas', env, {filial, periodo:amKey});
+    const [_ano, _mes] = amKey.split('_');
+    await limparDoSheets('despesas', env, {filial, ano:+_ano, mes:+_mes});
     await enviarParaSheets('despesas', env, rows, 'append');
     console.log(`✅ Despesas ${env.toUpperCase()} ${filial} ${amKey} sincronizadas (${rows.length} linhas)`);
   } catch(err){
