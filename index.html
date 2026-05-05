@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.9 | Gerado em: 05/05/2026 | Fix: metas sheets granular -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.9 | Gerado em: 05/05/2026 | Fix1: hdrPecas idx 2 | Fix2: metas sheets granular por filial -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -8087,7 +8087,7 @@ function parseMetaFile(wb, filialNome, env){
   const aoaPecas=toAoa('Peças');
   if(!aoaPecas.length) return metasImport;
 
-  const hdrPecas=aoaPecas[1]||[];
+  const hdrPecas=aoaPecas[2]||[];  // ✅ FIX: L3 (idx 2) contém datas — não L2 (idx 1 = "Dias úteis")
   const pecasColMes={};  // mes → colIdx
   hdrPecas.forEach((v,ci)=>{
     const r=xlSerialToMesAno(v);
@@ -8379,13 +8379,11 @@ function pFile(file){
           // ═══ ENVIO METAS PARA GOOGLE SHEETS ═══════════════════════
           // ✅ FIX v3.1.0.9: delete granular por filial — preserva outras filiais no Sheets
           if(SHEETS_CONFIG && SHEETS_CONFIG.enabled){
-            // Envia apenas as metas da filial recém-importada
             const metasFilial = metasImport.map(({fil,ind,canal,ano,mes,v}) => ({
               _key: mkKey(fil,ind,canal,ano,mes),
               filial: fil, indicador: ind, canal, ano, mes, valor: v
             })).filter(r => r.valor > 0);
             if(metasFilial.length > 0){
-              // Delete só as linhas da filial importada (preserva outras filiais)
               limparDoSheets('metas', upEnv, { filial: filialNome })
                 .then(() => _sheetsAppend('metas', upEnv, metasFilial, 'append'))
                 .then(() => mostrarToastSync('✅ Metas sincronizadas com Google Sheets', 'success'))
