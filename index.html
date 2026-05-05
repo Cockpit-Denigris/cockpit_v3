@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.5 | Gerado em: 04/05/2026 -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.6 | Gerado em: 04/05/2026 -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -1500,10 +1500,6 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
               <div style="font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Filial do arquivo PDF</div>
               <div style="display:flex;gap:6px;flex-wrap:wrap" id="desp-filsel-mb">
                 <button class="chip on-mb" data-fil="auto" onclick="despSelFil('mb',this)">🔍 Detectar automaticamente</button>
-                <button class="chip" data-fil="Sorocaba" onclick="despSelFil('mb',this)">Sorocaba</button>
-                <button class="chip" data-fil="Itapeva" onclick="despSelFil('mb',this)">Itapeva</button>
-                <button class="chip" data-fil="Itu" onclick="despSelFil('mb',this)">Itu</button>
-                <button class="chip" data-fil="Alumínio" onclick="despSelFil('mb',this)">Alumínio</button>
               </div>
             </div>
             <div id="desp-dropzone-mb" onclick="document.getElementById('desp-file-inp-mb').click()"
@@ -1783,10 +1779,6 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
               <div style="font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Filial do arquivo PDF</div>
               <div style="display:flex;gap:6px;flex-wrap:wrap" id="desp-filsel-mc">
                 <button class="chip on-mc" data-fil="auto" onclick="despSelFil('mc',this)">🔍 Detectar automaticamente</button>
-                <button class="chip" data-fil="Sorocaba" onclick="despSelFil('mc',this)">Sorocaba</button>
-                <button class="chip" data-fil="Itapeva" onclick="despSelFil('mc',this)">Itapeva</button>
-                <button class="chip" data-fil="Itu" onclick="despSelFil('mc',this)">Itu</button>
-                <button class="chip" data-fil="Alumínio" onclick="despSelFil('mc',this)">Alumínio</button>
               </div>
             </div>
             <div id="desp-dropzone-mc" onclick="document.getElementById('desp-file-inp-mc').click()"
@@ -9438,6 +9430,23 @@ async function _sincronizarTudoDoSheets(){
         });
         renderDesp(env);
         console.log(`✅ Despesas ${env.toUpperCase()} carregadas do Sheets: ${desp.length} linhas`);
+        // Recriar botões de filial dinamicamente após restaurar do Sheets
+        const filselWrap = document.getElementById(`desp-filsel-${env}`);
+        if(filselWrap){
+          Object.keys(DESP_DATA[env]).forEach(filial => {
+            if(!filselWrap.querySelector(`[data-fil="${filial}"]`)){
+              const btn = document.createElement('button');
+              btn.className = 'chip';
+              btn.dataset.fil = filial;
+              btn.onclick = function(){ despSelFil(env, this); };
+              btn.textContent = filial;
+              if(window._authFiliais && window._authFiliais.length && !window._authFiliais.includes(filial)){
+                btn.style.display = 'none';
+              }
+              filselWrap.appendChild(btn);
+            }
+          });
+        }
       }
     }
 
@@ -12352,6 +12361,18 @@ async function handleDespFiles(files, env){
       if(!DESP_DATA[env][filial]) DESP_DATA[env][filial] = {};
       DESP_DATA[env][filial][amKey] = { contas, filial, ano, mes };
       ok++;
+
+      // Adicionar botão da filial dinamicamente se ainda não existe
+      const filselWrap = document.getElementById(`desp-filsel-${env}`);
+      if(filselWrap && filial && !filselWrap.querySelector(`[data-fil="${filial}"]`)){
+        const btn = document.createElement('button');
+        btn.className = 'chip';
+        btn.dataset.fil = filial;
+        btn.onclick = function(){ despSelFil(env, this); };
+        btn.textContent = filial;
+        filselWrap.appendChild(btn);
+      }
+
       const src = filialOverride ? `⚙️ filial definida manualmente` : `🔍 detectada automaticamente`;
       if(st){ st.style.color='var(--grn)'; st.textContent = `✅ ${file.name} → ${filial} (${src}) · ${MES_LABEL[mes]}/${ano} · ${contas.length} contas`; }
     }catch(e){
@@ -13365,6 +13386,14 @@ function _despRenderAuditoria(env, contas, meses, wrap, fmtR){
 }
 
 // ── Filter pills ─────────────────────────────────────────────
+function _getDespFiliaisPermitidas(env){
+  // Retorna filiais de despesas visíveis para o usuário atual
+  const todas = Object.keys(DESP_DATA[env]||{}).sort();
+  const auth = window._authFiliais;
+  if(!auth || !auth.length) return todas;
+  return todas.filter(f => auth.includes(f));
+}
+
 function renderDespFilterPills(env){
   const data = DESP_DATA[env];
   const allFiliais = Object.keys(data);
