@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.6 | Gerado em: 04/05/2026 -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.7 | Gerado em: 05/05/2026 -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -12304,7 +12304,8 @@ function saveDespState(){
       });
       if (allRows.length > 0) {
         try {
-          await limparDoSheets('despesas', env);
+          // Enviar apenas as despesas novas — não delete_all
+          // Cada filial/período é único — append sem risco de duplicata
           await enviarParaSheets('despesas', env, allRows, 'append');
           console.log(`✅ Despesas ${env.toUpperCase()} sincronizadas (${allRows.length} linhas)`);
         } catch (err) {
@@ -12475,15 +12476,59 @@ function _parseContasFromFrags(frags, filename){
   const pBR = s => { try{ return parseFloat(String(s||'0').replace(/[DC]$/,'').replace(/\./g,'').replace(',','.')) || 0; } catch(e){ return 0; } };
 
   // ── Detectar filial e período ────────────────────────────────
-  let filial = 'Sorocaba', ano = 0, mes = 0;
+  let filial = '', ano = 0, mes = 0;
   const fn = (filename||'').toUpperCase();
   const mFile = fn.match(/(\d{2})[_\-](\d{4})/);
   if(mFile){ mes = parseInt(mFile[1]); ano = parseInt(mFile[2]); }
+
+  // Mapeamento completo de sufixos CNPJ para filiais
+  const CNPJ_FILIAL = {
+    '01': 'Limão',    // Matriz
+    '02': 'DN SJC',   // São José dos Campos (61.xxx/0002)
+    '04': 'Guarulhos',
+    '05': 'Itu',
+    '06': 'Sorocaba',
+    '07': 'Itapeva',
+    '09': 'Alumínio',
+    '10': 'Roseira',
+  };
+  // Para CNPJ 62.xxx (Demarchi/SBC)
+  const CNPJ_FILIAL_62 = {
+    '02': 'Demarchi',
+    '04': 'SBC',
+  };
+
   for(const f of frags.slice(0,60)){
-    const mCNPJ = f.match(/0006-(\d{2})/);
-    if(mCNPJ){ const suf=mCNPJ[1]; filial=suf==='06'?'Sorocaba':suf==='07'?'Itapeva':suf==='05'?'Itu':suf==='09'?'Alumínio':filial; }
+    // Buscar qualquer sufixo CNPJ no formato XXXX/XXXX-XX
+    const mCNPJ61 = f.match(/61[.-]\d{3}[.-]\d{3}\/0*(\d{2,4})[-.]\d{2}/);
+    const mCNPJ62 = f.match(/62[.-]\d{3}[.-]\d{3}\/0*(\d{2,4})[-.]\d{2}/);
+    if(mCNPJ61){
+      const suf = String(parseInt(mCNPJ61[1])).padStart(2,'0');
+      if(CNPJ_FILIAL[suf]) filial = CNPJ_FILIAL[suf];
+    } else if(mCNPJ62){
+      const suf = String(parseInt(mCNPJ62[1])).padStart(2,'0');
+      if(CNPJ_FILIAL_62[suf]) filial = CNPJ_FILIAL_62[suf];
+    }
+    // Fallback: buscar sufixo no formato antigo /XXXX-XX
+    if(!filial){
+      const mSuf = f.match(/\/\d{4}-(\d{2})/);
+      if(mSuf){ const suf=mSuf[1]; filial=CNPJ_FILIAL[suf]||CNPJ_FILIAL_62[suf]||''; }
+    }
     const mDate = f.match(/(\d{2})\/(\d{2})\/(\d{4})/);
     if(mDate && !ano){ mes=parseInt(mDate[2]); ano=parseInt(mDate[3]); }
+    if(filial && ano && mes) break;
+  }
+  // Fallback pelo nome do arquivo
+  if(!filial){
+    const fnU = fn;
+    if(fnU.includes('SOROCABA')) filial='Sorocaba';
+    else if(fnU.includes('ITAPEVA')) filial='Itapeva';
+    else if(fnU.includes('ITU')) filial='Itu';
+    else if(fnU.includes('ALUMIN')) filial='Alumínio';
+    else if(fnU.includes('SJC')||fnU.includes('JOSE')) filial='DN SJC';
+    else if(fnU.includes('ROSEIRA')) filial='Roseira';
+    else if(fnU.includes('LIMAO')||fnU.includes('MATRIZ')) filial='Limão';
+    else filial='Desconhecida';
   }
   if(!ano){ ano=new Date().getFullYear(); }
   if(!mes){ mes=new Date().getMonth()+1; }
