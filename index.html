@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.9 | Gerado em: 05/05/2026 | Fix1: hdrPecas idx 2 | Fix2: metas sheets granular por filial -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.9 | Gerado em: 05/05/2026 | Fix1: hdrPecas idx2 | Fix2: metas sheets granular por filial | Fix3: OS sempre append no Sheets -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -8087,7 +8087,7 @@ function parseMetaFile(wb, filialNome, env){
   const aoaPecas=toAoa('Peças');
   if(!aoaPecas.length) return metasImport;
 
-  const hdrPecas=aoaPecas[2]||[];  // ✅ FIX: L3 (idx 2) contém datas — não L2 (idx 1 = "Dias úteis")
+  const hdrPecas=aoaPecas[2]||[];  // ✅ FIX 1: L3 (idx 2) contém datas — não L2 (idx 1 = "Dias úteis")
   const pecasColMes={};  // mes → colIdx
   hdrPecas.forEach((v,ci)=>{
     const r=xlSerialToMesAno(v);
@@ -8273,9 +8273,10 @@ function pFile(file){
         renderAll(upEnv);
 
         // ═══ ENVIO AUTOMÁTICO PARA GOOGLE SHEETS ══════════════════
+        // ✅ FIX 3: OS sempre 'append' — limpeza local já garante sem duplicata
+        // 'replace' sem periodo causaria delete_all na aba VENDAS do Sheets
         if (SHEETS_CONFIG && SHEETS_CONFIG.enabled && osRows.length > 0) {
-          const acaoSheets = modo === 'substituir' ? 'replace' : 'append';
-          _sheetsAppend('vendas', upEnv, osRows, acaoSheets)
+          _sheetsAppend('vendas', upEnv, osRows, 'append')
             .then(() => mostrarToastSync('✅ FAT_OF sincronizado com Google Sheets', 'success'))
             .catch(err => console.warn('⚠️ Erro ao sincronizar FAT_OF com Sheets:', err));
         }
@@ -8377,7 +8378,7 @@ function pFile(file){
           renderAll(upEnv);
 
           // ═══ ENVIO METAS PARA GOOGLE SHEETS ═══════════════════════
-          // ✅ FIX v3.1.0.9: delete granular por filial — preserva outras filiais no Sheets
+          // ✅ FIX 2: delete granular por filial — preserva outras filiais no Sheets
           if(SHEETS_CONFIG && SHEETS_CONFIG.enabled){
             const metasFilial = metasImport.map(({fil,ind,canal,ano,mes,v}) => ({
               _key: mkKey(fil,ind,canal,ano,mes),
