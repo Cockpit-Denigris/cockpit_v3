@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.11 | Gerado em: 05/05/2026 | Fix1: hdrPecas idx2 | Fix2: metas sheets granular por filial | Fix3: OS sempre append no Sheets | Fix4: upload múltiplos arquivos fila sequencial | Fix5: normalizar tipos numéricos ao carregar do Sheets (DRE sumia) -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.12 | Gerado em: 05/05/2026 | Fix1: hdrPecas idx2 | Fix2: metas sheets granular por filial | Fix3: OS sempre append no Sheets | Fix4: upload múltiplos arquivos fila sequencial | Fix5: normalizar tipos numéricos ao carregar do Sheets | Fix6: pausa fila aumentada 2.5s aguardar Sheets -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -7003,10 +7003,13 @@ async function _processFileQueue(files){
         checks++;
         const txt=st?st.textContent:'';
         const done=txt.startsWith('✅')||txt.startsWith('❌');
-        if(done||checks>300){
+        // ✅ FIX 6: timeout aumentado (600 checks × 100ms = 60s por arquivo)
+        // Aguarda texto de conclusão E pausa extra para Sheets terminar
+        if(done||checks>600){
           clearInterval(interval);
           window._closeUpQueued=false;
-          setTimeout(resolve,800);
+          // Pausa de 2.5s entre arquivos — dá tempo ao Sheets de processar
+          setTimeout(resolve, 2500);
         }
       },100);
     });
