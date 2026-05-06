@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.15 | Gerado em: 06/05/2026 | Fix1: hdrPecas idx2 | Fix2: metas sheets granular | Fix3: OS append | Fix4: fila multiplos arquivos | Fix5: normalizar tipos Sheets | Fix6: pausa fila | Fix7: fila aguarda Sheets | Fix8: detecção filial PDF robusta | Fix9: hash SHA-256 senhas -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.16 | Gerado em: 06/05/2026 | Fix1-9: anteriores | Fix10: usuários persistidos no Sheets entre devices -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -8785,7 +8785,49 @@ function authGetUsers(){
 }
 function authSaveUsers(users){
   try{ localStorage.setItem(AUTH_KEY, JSON.stringify(users)); }catch{}
+  // ✅ FIX 10: sincronizar usuários com Sheets para persistir entre devices
+  _authSyncToSheets(users);
 }
+
+// ── Sincronização de usuários com Google Sheets ─────────────────
+async function _authSyncToSheets(users){
+  if(!SHEETS_CONFIG || !SHEETS_CONFIG.enabled) return;
+  try{
+    // Nunca salvar admin no Sheets — fica só no HTML
+    const usersParaSheets = users.filter(u=>u.id!=='__admin__').map(u=>({
+      id: u.id, nome: u.nome, login: u.login,
+      senha: u.senha, role: u.role,
+      filiais: JSON.stringify(u.filiais||[]),
+      nucleo: u.nucleo||'',
+      modulos: JSON.stringify(u.modulos||[]),
+      primeiroAcesso: u.primeiroAcesso?'1':'0',
+    }));
+    await limparDoSheets('usuarios', 'mb');
+    if(usersParaSheets.length > 0){
+      await _sheetsAppend('usuarios', 'mb', usersParaSheets, 'append');
+    }
+  } catch(e){ console.warn('⚠️ Erro ao sincronizar usuários com Sheets:', e); }
+}
+
+async function _authLoadFromSheets(){
+  if(!SHEETS_CONFIG || !SHEETS_CONFIG.enabled) return;
+  try{
+    const data = await lerDoSheets('usuarios', 'mb');
+    if(!data || !data.length) return;
+    const users = data.map(r=>({
+      id: r.id, nome: r.nome, login: r.login,
+      senha: r.senha, role: r.role,
+      filiais: JSON.parse(r.filiais||'[]'),
+      nucleo: r.nucleo||null,
+      modulos: JSON.parse(r.modulos||'[]'),
+      ...(r.primeiroAcesso==='1' ? {primeiroAcesso:true} : {}),
+    }));
+    // Mesclar com localStorage — Sheets é fonte de verdade para senhas
+    localStorage.setItem(AUTH_KEY, JSON.stringify(users));
+    console.log(`✅ Usuários carregados do Sheets: ${users.length}`);
+  } catch(e){ console.warn('⚠️ Erro ao carregar usuários do Sheets:', e); }
+}
+// ───────────────────────────────────────────────────────────────
 function authGetAll(){
   const stored = authGetUsers();
   const storedIds = new Set(stored.map(u=>u.id));
@@ -8795,7 +8837,10 @@ function authGetAll(){
 
 let _currentUser = null;
 
-function authInit(){
+async function authInit(){
+  // ✅ FIX 10: carregar usuários do Sheets antes de mostrar tela de login
+  await _authLoadFromSheets();
+
   // Check existing session
   try{
     const s=JSON.parse(sessionStorage.getItem(SESS_KEY)||'null');
