@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.14 | Gerado em: 06/05/2026 | Fix1: hdrPecas idx2 | Fix2: metas sheets granular por filial | Fix3: OS sempre append no Sheets | Fix4: upload múltiplos arquivos fila sequencial | Fix5: normalizar tipos numéricos ao carregar do Sheets | Fix6: pausa fila 2.5s | Fix7: fila aguarda confirmação Sheets | Fix8: detecção filial robusta PDF (Concessionária em linha separada) -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.15 | Gerado em: 06/05/2026 | Fix1: hdrPecas idx2 | Fix2: metas sheets granular | Fix3: OS append | Fix4: fila multiplos arquivos | Fix5: normalizar tipos Sheets | Fix6: pausa fila | Fix7: fila aguarda Sheets | Fix8: detecção filial PDF robusta | Fix9: hash SHA-256 senhas -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -8770,14 +8770,14 @@ const ROLE_LABELS = {
 };
 
 // Default admin user (always present, cannot be deleted)
-const DEFAULT_ADMIN = { id:'__admin__', nome:'Administrador', login:'admin', senha:'admin123', role:'admin', filiais:[], modulos:[] };
+const DEFAULT_ADMIN = { id:'__admin__', nome:'Administrador', login:'admin', senha:'240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', role:'admin', filiais:[], modulos:[] };
 
 const BUILTIN_USERS = [
-  { id:'__fabio__',   nome:'Fabio Freitas',  login:'afabio.freitas', senha:'Mudar123', role:'full',    filiais:[], nucleo:null, modulos:[] },
-  { id:'__giovane__', nome:'Giovane Silva',  login:'giovane.silva',  senha:'Mudar123', role:'full',    filiais:[], nucleo:null, modulos:[] },
-  { id:'__rodrigo__', nome:'Rodrigo Pulgas', login:'rodrigo.pulgas', senha:'Mudar123', role:'full',    filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
-  { id:'__marcelo__', nome:'Marcelo Santos', login:'marcelo.santos', senha:'Mudar123', role:'consult', filiais:['DN SJC','Roseira'],                    nucleo:'Edivaldo', modulos:[], primeiroAcesso:true },
-  { id:'__arlei__',   nome:'Arlei Bethiol',  login:'arlei.bethiol',  senha:'Mudar123', role:'consult', filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
+  { id:'__fabio__',   nome:'Fabio Freitas',  login:'afabio.freitas', senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'full',    filiais:[], nucleo:null, modulos:[] },
+  { id:'__giovane__', nome:'Giovane Silva',  login:'giovane.silva',  senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'full',    filiais:[], nucleo:null, modulos:[] },
+  { id:'__rodrigo__', nome:'Rodrigo Pulgas', login:'rodrigo.pulgas', senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'full',    filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
+  { id:'__marcelo__', nome:'Marcelo Santos', login:'marcelo.santos', senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'consult', filiais:['DN SJC','Roseira'],                    nucleo:'Edivaldo', modulos:[], primeiroAcesso:true },
+  { id:'__arlei__',   nome:'Arlei Bethiol',  login:'arlei.bethiol',  senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'consult', filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
 ];
 
 function authGetUsers(){
@@ -8849,11 +8849,34 @@ function doLogin(){
   err.textContent='';
   if(!login||!senha){ err.textContent='Preencha usuário e senha.'; return; }
   const users=authGetAll();
-  const u=users.find(u=>u.login.toLowerCase()===login && u.senha===senha);
-  if(!u){ err.textContent='Usuário ou senha incorretos.'; return; }
-  _currentUser=u;
-  sessionStorage.setItem(SESS_KEY, JSON.stringify({id:u.id}));
-  authEnter();
+
+  // ✅ FIX 9: login com hash SHA-256 + fallback legado (texto plano)
+  hashSenha(senha).then(async hashed => {
+    const u = users.find(u => u.login.toLowerCase()===login && (u.senha===hashed || u.senha===senha));
+    if(!u){ err.textContent='Usuário ou senha incorretos.'; return; }
+
+    // Se a senha ainda estava em texto plano → migrar para hash agora
+    if(u.senha===senha && u.senha!==hashed){
+      const todos=authGetAll();
+      const idx=todos.findIndex(x=>x.id===u.id);
+      if(idx>=0){
+        todos[idx].senha=hashed;
+        u.senha=hashed;
+        if(u.id==='__admin__'){
+          const list=todos.filter(x=>x.id!=='__admin__');
+          list.unshift({...todos[idx]});
+          authSaveUsers(list.filter(x=>x.id!=='__admin__'));
+        } else {
+          authSaveUsers(todos.filter(x=>x.id!=='__admin__'));
+        }
+        console.log(`🔐 Senha de ${u.login} migrada para hash SHA-256`);
+      }
+    }
+
+    _currentUser=u;
+    sessionStorage.setItem(SESS_KEY, JSON.stringify({id:u.id}));
+    authEnter();
+  });
 }
 
 function doLogout(){
@@ -8928,18 +8951,21 @@ function _confirmarPrimeiraSenha(){
   if(!nova||nova.length<6){ if(msg) msg.textContent='A senha deve ter no mínimo 6 caracteres.'; return; }
   if(nova!==conf){ if(msg) msg.textContent='As senhas não coincidem.'; return; }
   if(nova==='Mudar123'||nova==='admin123'){ if(msg) msg.textContent='Escolha uma senha diferente da senha padrão.'; return; }
-  const todos=authGetAll();
-  const idx=todos.findIndex(x=>x.id===_currentUser.id);
-  if(idx>=0){
-    todos[idx].senha=nova;
-    delete todos[idx].primeiroAcesso;
-    _currentUser=todos[idx];
-    authSaveUsers(todos.filter(u=>u.id!=='__admin__'));
-  }
-  const ov=document.getElementById('first-access-ov');
-  if(ov) ov.remove();
-  authApplyPermissions();
-  appInit();
+  // ✅ FIX 9: salvar hash em vez de texto plano
+  hashSenha(nova).then(hashed => {
+    const todos=authGetAll();
+    const idx=todos.findIndex(x=>x.id===_currentUser.id);
+    if(idx>=0){
+      todos[idx].senha=hashed;
+      delete todos[idx].primeiroAcesso;
+      _currentUser=todos[idx];
+      authSaveUsers(todos.filter(u=>u.id!=='__admin__'));
+    }
+    const ov=document.getElementById('first-access-ov');
+    if(ov) ov.remove();
+    authApplyPermissions();
+    appInit();
+  });
 }
 
 function authApplyPermissions(){
@@ -9116,25 +9142,26 @@ function doChgPass(){
 
   if(!oldVal||!newVal||!conf){ setMsg('Preencha todos os campos.',false); return; }
 
-  // Verify old password (admin default or stored hash)
-  const isDefault = (u.id==='__admin__' && u.senha===undefined && oldVal==='admin123');
-  const users=authGetAll();
-  const stored=users.find(x=>x.id===u.id);
-  if(!isDefault && (!stored || stored.senha!==oldVal)){ setMsg('Senha atual incorreta.',false); return; }
-  if(newVal.length<4){ setMsg('A nova senha deve ter pelo menos 4 caracteres.',false); return; }
-  if(newVal!==conf){ setMsg('As senhas não conferem.',false); return; }
+  // ✅ FIX 9: verificar senha atual com hash + fallback legado
+  hashSenha(oldVal).then(async oldHash => {
+    const users=authGetAll();
+    const stored=users.find(x=>x.id===u.id);
+    const senhaOk = stored && (stored.senha===oldHash || stored.senha===oldVal);
+    if(!senhaOk){ setMsg('Senha atual incorreta.',false); return; }
+    if(newVal.length<4){ setMsg('A nova senha deve ter pelo menos 4 caracteres.',false); return; }
+    if(newVal!==conf){ setMsg('As senhas não conferem.',false); return; }
 
-  // Save new password
-  if(u.id==='__admin__'){
-    // Store admin password persistently
-    const list=authGetAll().filter(x=>x.id!=='__admin__');
-    list.unshift({id:'__admin__',login:'admin',nome:'Admin',role:'admin',senha:newVal});
-    authSaveAll(list);
-  } else {
-    if(stored){ stored.senha=newVal; authSaveAll(users); }
-  }
-  setMsg('✅ Senha alterada com sucesso!',true);
-  setTimeout(()=>closeChgPass(),1500);
+    const newHash = await hashSenha(newVal);
+    if(u.id==='__admin__'){
+      const list=authGetAll().filter(x=>x.id!=='__admin__');
+      list.unshift({id:'__admin__',login:'admin',nome:'Admin',role:'admin',senha:newHash});
+      authSaveUsers(list.filter(x=>x.id!=='__admin__'));
+    } else {
+      if(stored){ stored.senha=newHash; authSaveUsers(users.filter(x=>x.id!=='__admin__')); }
+    }
+    setMsg('✅ Senha alterada com sucesso!',true);
+    setTimeout(()=>closeChgPass(),1500);
+  });
 }
 
 function admTab(tab, btn){
@@ -9208,10 +9235,26 @@ function admSaveUser(){
     const idx=users.findIndex(u=>u.id===id);
     if(idx>=0){
       users[idx]={...users[idx], nome, login, role, filiais, modulos};
-      if(senha) users[idx].senha=senha;
+      if(senha){
+        // ✅ FIX 9: salvar hash ao editar usuário
+        hashSenha(senha).then(hashed=>{
+          users[idx].senha=hashed;
+          authSaveUsers(users);
+        });
+        authSaveUsers(users); // salva sem senha primeiro, hash chega em ms
+        return;
+      }
     }
   } else {
-    users.push({ id:'u_'+Date.now(), nome, login, senha, role, filiais, modulos });
+    // ✅ FIX 9: salvar hash ao criar usuário
+    hashSenha(senha).then(hashed=>{
+      users.push({ id:'u_'+Date.now(), nome, login, senha:hashed, role, filiais, modulos, primeiroAcesso:true });
+      authSaveUsers(users);
+    });
+    const errEl=document.getElementById('adm-form-err');
+    if(errEl){ errEl.style.color='var(--grn)'; errEl.textContent=`✅ Usuário "${nome}" salvo com sucesso!`; }
+    setTimeout(()=>{ admCancelEdit(); admTab('list', document.getElementById('admtab-list')); }, 900);
+    return;
   }
   authSaveUsers(users);
   // Show success feedback
