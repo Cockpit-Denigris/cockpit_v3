@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.13 | Gerado em: 05/05/2026 | Fix1: hdrPecas idx2 | Fix2: metas sheets granular por filial | Fix3: OS sempre append no Sheets | Fix4: upload múltiplos arquivos fila sequencial | Fix5: normalizar tipos numéricos ao carregar do Sheets | Fix6: pausa fila aumentada 2.5s | Fix7: fila aguarda confirmação Sheets antes do próximo arquivo -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.14 | Gerado em: 06/05/2026 | Fix1: hdrPecas idx2 | Fix2: metas sheets granular por filial | Fix3: OS sempre append no Sheets | Fix4: upload múltiplos arquivos fila sequencial | Fix5: normalizar tipos numéricos ao carregar do Sheets | Fix6: pausa fila 2.5s | Fix7: fila aguarda confirmação Sheets | Fix8: detecção filial robusta PDF (Concessionária em linha separada) -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -7345,8 +7345,16 @@ function parseFatOfText(text, env){
   let filialNome='', periodoStr='', mes=0, ano=0;
   for(let i=0;i<Math.min(30,lines.length);i++){
     const l=lines[i];
-    const concM=l.match(/Concessionária[:\s]+(.+)/i);
-    if(concM) filialNome=mapFilial(concM[1].trim());
+    // ✅ FIX 8: aceita "Concessionária: DN ROSEIRA", "Concessionária:\tDN ROSEIRA"
+    // e também "Concessionária:" na linha i com valor na linha i+1
+    const concM=l.match(/Concessionária[:\s\t]+(.+)/i);
+    if(concM){
+      const val=concM[1].trim();
+      filialNome = mapFilial(val || (lines[i+1]||'').trim());
+    } else if(/^Concessionária\s*:?\s*$/i.test(l) && lines[i+1]){
+      // Linha só com "Concessionária:" — valor na próxima linha
+      filialNome = mapFilial(lines[i+1].trim());
+    }
     const perM=l.match(/(\d{2}\/\d{2}\/\d{4})\s*[àa]\s*(\d{2}\/\d{2}\/\d{4})/);
     if(perM){
       periodoStr=perM[0];
