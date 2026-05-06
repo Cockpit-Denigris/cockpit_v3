@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.12 | Gerado em: 05/05/2026 | Fix1: hdrPecas idx2 | Fix2: metas sheets granular por filial | Fix3: OS sempre append no Sheets | Fix4: upload múltiplos arquivos fila sequencial | Fix5: normalizar tipos numéricos ao carregar do Sheets | Fix6: pausa fila aumentada 2.5s aguardar Sheets -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.13 | Gerado em: 05/05/2026 | Fix1: hdrPecas idx2 | Fix2: metas sheets granular por filial | Fix3: OS sempre append no Sheets | Fix4: upload múltiplos arquivos fila sequencial | Fix5: normalizar tipos numéricos ao carregar do Sheets | Fix6: pausa fila aumentada 2.5s | Fix7: fila aguarda confirmação Sheets antes do próximo arquivo -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -6997,19 +6997,21 @@ async function _processFileQueue(files){
 
     await new Promise(resolve=>{
       window._closeUpQueued=true;
+      window._sheetsFilaDone = false; // reset antes de cada arquivo
       pFile(file);
       let checks=0;
       const interval=setInterval(()=>{
         checks++;
         const txt=st?st.textContent:'';
-        const done=txt.startsWith('✅')||txt.startsWith('❌');
-        // ✅ FIX 6: timeout aumentado (600 checks × 100ms = 60s por arquivo)
-        // Aguarda texto de conclusão E pausa extra para Sheets terminar
-        if(done||checks>600){
+        const uiDone = txt.startsWith('✅')||txt.startsWith('❌');
+        // ✅ FIX 7: aguarda UI concluída E Sheets confirmado antes de avançar
+        const sheetsDone = window._sheetsFilaDone === true;
+        const timeout = checks > 600; // 60s limite de segurança
+        if((uiDone && sheetsDone) || timeout){
           clearInterval(interval);
           window._closeUpQueued=false;
-          // Pausa de 2.5s entre arquivos — dá tempo ao Sheets de processar
-          setTimeout(resolve, 2500);
+          // Pausa extra entre arquivos
+          setTimeout(resolve, 500);
         }
       },100);
     });
@@ -8310,11 +8312,21 @@ function pFile(file){
 
         // ═══ ENVIO AUTOMÁTICO PARA GOOGLE SHEETS ══════════════════
         // ✅ FIX 3: OS sempre 'append' — limpeza local já garante sem duplicata
-        // 'replace' sem periodo causaria delete_all na aba VENDAS do Sheets
+        // ✅ FIX 7: sinaliza _sheetsFilaDone após Sheets confirmar
+        //    Fila aguarda esse sinal antes de processar próximo arquivo
+        window._sheetsFilaDone = false;
         if (SHEETS_CONFIG && SHEETS_CONFIG.enabled && osRows.length > 0) {
           _sheetsAppend('vendas', upEnv, osRows, 'append')
-            .then(() => mostrarToastSync('✅ FAT_OF sincronizado com Google Sheets', 'success'))
-            .catch(err => console.warn('⚠️ Erro ao sincronizar FAT_OF com Sheets:', err));
+            .then(() => {
+              mostrarToastSync('✅ FAT_OF sincronizado com Google Sheets', 'success');
+              window._sheetsFilaDone = true;
+            })
+            .catch(err => {
+              console.warn('⚠️ Erro ao sincronizar FAT_OF com Sheets:', err);
+              window._sheetsFilaDone = true; // libera fila mesmo com erro
+            });
+        } else {
+          window._sheetsFilaDone = true; // sem Sheets, libera imediatamente
         }
         // ══════════════════════════════════════════════════════════
 
