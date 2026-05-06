@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.16 | Gerado em: 06/05/2026 | Fix1-9: anteriores | Fix10: usuários persistidos no Sheets entre devices -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.17 | Gerado em: 06/05/2026 | Fix1-10: anteriores | Fix11: consult filial chips clicáveis, Carregar Estoque oculto, chips estoque restritos por núcleo -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -3942,15 +3942,10 @@ function initFilialChips(env){
   // Chips por filial
   filsNoDado.forEach(f => {
     const c = document.createElement('div');
-    c.className = 'chip' + (selAtual.has(f) ? ' on-'+env : '');
+    c.className = 'chip' + (selAtual.has(f)||selAtual.has('all') ? ' on-'+env : '');
     c.textContent = f;
-    // Usuários com restrição não podem desmarcar filiais
-    if(!authFils || !authFils.length){
-      c.onclick = () => fTogFilial(env, c, f);
-    } else {
-      c.style.cursor = 'default';
-      c.title = 'Acesso restrito ao seu núcleo';
-    }
+    // ✅ FIX 11b: usuários restritos podem filtrar filiais individuais dentro do seu núcleo
+    c.onclick = () => fTogFilial(env, c, f);
     wrap.appendChild(c);
   });
 
@@ -9050,6 +9045,10 @@ function authApplyPermissions(){
   if(u.filiais && u.filiais.length > 0){
     window._authFiliais = u.filiais;
     window._authNucleo  = u.nucleo || null;
+    // ✅ FIX 11b: iniciar com 'all' dentro das filiais permitidas — permite filtrar individualmente
+    ['mb','mc'].forEach(env => {
+      F[env].filial = new Set(['all']);
+    });
     // Ocultar chips de núcleos não permitidos
     setTimeout(()=>{
       ['MB','MC'].forEach(env=>{
@@ -9084,6 +9083,15 @@ function authApplyPermissions(){
     ['mb','mc'].forEach(env => {
       const btnCruz = document.getElementById(`esttab-cruz-${env}`);
       if(btnCruz){ btnCruz.classList.add('mb-on'); }
+    });
+    // ✅ FIX 11a: ocultar botões Carregar Estoque para consult
+    ['mb','mc'].forEach(env => {
+      // Botão no header do estoque
+      const hdrBtn = document.querySelector(`button[onclick="openEstUpload('${env}')"]`);
+      if(hdrBtn) hdrBtn.style.display = 'none';
+      // Botão na tela vazia
+      const emptyBtn = document.querySelector(`#est-empty-${env} button`);
+      if(emptyBtn) emptyBtn.style.display = 'none';
     });
   } else {
     // Admin/full — mostrar todas as tabs
@@ -10045,22 +10053,25 @@ function initEstFilters(env){
   const nc=document.getElementById(`chips-est-nucleo-${env}`);
   if(nc){
     nc.innerHTML='';
-    // "Todos" chip
-    const allCh=document.createElement('button');
-    allCh.className='chip on-'+env; allCh.textContent='Todos';
-    allCh.onclick=()=>{
-      nc.querySelectorAll('.chip').forEach(c=>c.classList.remove('on-mb','on-mc'));
-      allCh.classList.add('on-'+env);
-      EST_F[env].filiais=new Set(filiais);
-      // Selecionar todas as filiais nos chips
-      const fc2=document.getElementById(`chips-est-fil-${env}`);
-      if(fc2) fc2.querySelectorAll('.chip').forEach(c=>c.classList.add('on-'+env));
-      renderEstoque(env);
-    };
-    nc.appendChild(allCh);
+    // ✅ FIX 11c: filtrar por filiais permitidas ao usuário
+    const authFilsEst = window._authFiliais;
+    // "Todos" chip — só para admin/full sem restrição
+    if(!authFilsEst || !authFilsEst.length){
+      const allCh=document.createElement('button');
+      allCh.className='chip on-'+env; allCh.textContent='Todos';
+      allCh.onclick=()=>{
+        nc.querySelectorAll('.chip').forEach(c=>c.classList.remove('on-mb','on-mc'));
+        allCh.classList.add('on-'+env);
+        EST_F[env].filiais=new Set(filiais);
+        const fc2=document.getElementById(`chips-est-fil-${env}`);
+        if(fc2) fc2.querySelectorAll('.chip').forEach(c=>c.classList.add('on-'+env));
+        renderEstoque(env);
+      };
+      nc.appendChild(allCh);
+    }
     NUCLEOS.forEach(nucl=>{
-      // Só mostrar núcleos que têm filiais no estoque
-      const filsNoEst=nucl.filiais.filter(f=>filiais.includes(f));
+      // Só mostrar núcleos que têm filiais no estoque E que o usuário tem acesso
+      const filsNoEst=nucl.filiais.filter(f=>filiais.includes(f) && (!authFilsEst || !authFilsEst.length || authFilsEst.includes(f)));
       if(!filsNoEst.length) return;
       const ch=document.createElement('button');
       ch.className='chip'; ch.textContent=nucl.nome;
