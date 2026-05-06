@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.17 | Gerado em: 06/05/2026 | Fix1-10: anteriores | Fix11: consult filial chips clicáveis, Carregar Estoque oculto, chips estoque restritos por núcleo -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.20 | Gerado em: 06/05/2026 | Fix1-13: anteriores | Fix14: estoque banner oculto consult, aba cruz forçada, filtros funcionando -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -8773,6 +8773,7 @@ const BUILTIN_USERS = [
   { id:'__rodrigo__', nome:'Rodrigo Pulgas', login:'rodrigo.pulgas', senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'full',    filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
   { id:'__marcelo__', nome:'Marcelo Santos', login:'marcelo.santos', senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'consult', filiais:['DN SJC','Roseira'],                    nucleo:'Edivaldo', modulos:[], primeiroAcesso:true },
   { id:'__arlei__',   nome:'Arlei Bethiol',  login:'arlei.bethiol',  senha:'bc2e1f676370b8131e3a1f84fc6c1cd6c9266f279030c92604fde8cfa8a1e0d3', role:'consult', filiais:['Itu','Sorocaba','Itapeva','Alumínio'], nucleo:'Afabio',  modulos:[], primeiroAcesso:true },
+  { id:'__teste__',   nome:'Usuário Teste',  login:'teste',          senha:'a444aaaffde8a69f3e2e96b2f93d2d8a78f301f385cf9c171b439e8f3f193567', role:'consult', filiais:['DN SJC','Roseira'],                    nucleo:'Edivaldo', modulos:[], primeiroAcesso:true },
 ];
 
 function authGetUsers(){
@@ -9084,14 +9085,15 @@ function authApplyPermissions(){
       const btnCruz = document.getElementById(`esttab-cruz-${env}`);
       if(btnCruz){ btnCruz.classList.add('mb-on'); }
     });
-    // ✅ FIX 11a: ocultar botões Carregar Estoque para consult
+    // ✅ FIX 11a + 12a + 13a: ocultar botões e banner estoque para consult
     ['mb','mc'].forEach(env => {
-      // Botão no header do estoque
-      const hdrBtn = document.querySelector(`button[onclick="openEstUpload('${env}')"]`);
-      if(hdrBtn) hdrBtn.style.display = 'none';
-      // Botão na tela vazia
-      const emptyBtn = document.querySelector(`#est-empty-${env} button`);
-      if(emptyBtn) emptyBtn.style.display = 'none';
+      // Ocultar todos os botões que chamam openEstUpload
+      document.querySelectorAll(`[onclick="openEstUpload('${env}')"]`).forEach(el => el.style.display = 'none');
+      // Ocultar o bloco est-empty inteiro permanentemente para consult
+      const emptyEl = document.getElementById(`est-empty-${env}`);
+      if(emptyEl){ emptyEl.style.display = 'none'; emptyEl.dataset.forceHide = '1'; }
+      // ✅ FIX 13a: forçar aba Cruzamento como ativa para consult
+      _estCurTab[env] = 'cruz';
     });
   } else {
     // Admin/full — mostrar todas as tabs
@@ -10043,7 +10045,12 @@ function initEstFilters(env){
   if(!EST_F[env].periodos.size||![...EST_F[env].periodos].every(p=>keys.includes(p))){
     EST_F[env].periodos=new Set(keys);
   }
-  EST_F[env].filiais=new Set(filiais);
+  // ✅ FIX 12b: restringir filiais do estoque às permitidas ao usuário
+  const _authFilEst = window._authFiliais;
+  const filiaisPermitidas = _authFilEst && _authFilEst.length
+    ? filiais.filter(f => _authFilEst.includes(f))
+    : filiais;
+  EST_F[env].filiais=new Set(filiaisPermitidas);
   EST_F[env].mobs=new Set();   // vazio = todos passam
   EST_F[env].curvas=new Set(); // vazio = todos passam
   EST_F[env].tec=new Set(['SIM','NÃO']);
@@ -10111,7 +10118,12 @@ function initEstFilters(env){
   const fc=document.getElementById(`chips-est-fil-${env}`);
   if(fc){
     fc.innerHTML='';
-    filiais.forEach(f=>{
+    // ✅ FIX 12c: só mostrar filiais permitidas ao usuário
+    const _authFilEst2 = window._authFiliais;
+    const filiaisVisiveis = _authFilEst2 && _authFilEst2.length
+      ? filiais.filter(f => _authFilEst2.includes(f))
+      : filiais;
+    filiaisVisiveis.forEach(f=>{
       const ch=document.createElement('button');
       ch.className='chip on-'+env; ch.textContent=f;
       ch.onclick=()=>{ ch.classList.toggle('on-'+env); EST_F[env].filiais[ch.classList.contains('on-'+env)?'add':'delete'](f); renderEstoque(env); };
@@ -10293,7 +10305,10 @@ function updateGrpBtn(env){
 // ── Main render ──────────────────────────────────────────────
 function renderEstoque(env){
   const hasData=Object.keys(EST_DATA[env].snapshots).length>0;
-  document.getElementById(`est-empty-${env}`).style.display=hasData?'none':'';
+  // ✅ FIX 13b: não reexibir banner se foi forçado oculto para consult
+  const emptyEl=document.getElementById(`est-empty-${env}`);
+  if(emptyEl && !emptyEl.dataset.forceHide) emptyEl.style.display=hasData?'none':'';
+  else if(emptyEl) emptyEl.style.display='none';
   // Show subnav only when data exists
   const sn=document.getElementById(`est-subnav-${env}`);
   if(sn) sn.style.display=hasData?'block':'none';
