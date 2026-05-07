@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.27 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.28 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -3932,18 +3932,13 @@ function initFilialChips(env){
     wrap.appendChild(allChip);
   }
 
-  // Chips por filial
+  // Chips por filial — todos clicáveis, restrição é só de quais filiais aparecem
   filsNoDado.forEach(f => {
     const c = document.createElement('div');
-    c.className = 'chip' + (selAtual.has(f) ? ' on-'+env : '');
+    c.className = 'chip' + (selAtual.has(f)||selAtual.has('all') ? ' on-'+env : '');
     c.textContent = f;
-    // Usuários com restrição não podem desmarcar filiais
-    if(!authFils || !authFils.length){
-      c.onclick = () => fTogFilial(env, c, f);
-    } else {
-      c.style.cursor = 'default';
-      c.title = 'Acesso restrito ao seu núcleo';
-    }
+    // ✅ FIX: consult pode filtrar dentro das filiais do seu núcleo
+    c.onclick = () => fTogFilial(env, c, f);
     wrap.appendChild(c);
   });
 
@@ -9076,27 +9071,20 @@ function authApplyPermissions(){
     }, 100);
   }
 
-  // Aba Estoque — usuários com filiais restritas só veem Cruzamento de Curvas
-  if(u.filiais && u.filiais.length > 0){
-    // Ocultar tabs que não são Cruzamento de Curvas no estoque
-    ['visao','itens','vsfat'].forEach(tab => {
-      ['mb','mc'].forEach(env => {
-        const btn = document.getElementById(`esttab-${tab}-${env}`);
-        if(btn) btn.style.display = 'none';
-      });
-    });
-    // Forçar aba cruzamento como ativa
+  // ✅ FIX: todas as abas visíveis para todos os usuários
+  // Restrição de dados é feita via getEstAllItems (filtra por _authFiliais)
+  ['visao','itens','cruz','vsfat'].forEach(tab => {
     ['mb','mc'].forEach(env => {
-      const btnCruz = document.getElementById(`esttab-cruz-${env}`);
-      if(btnCruz){ btnCruz.classList.add('mb-on'); }
+      const btn = document.getElementById(`esttab-${tab}-${env}`);
+      if(btn) btn.style.display = '';
     });
-  } else {
-    // Admin/full — mostrar todas as tabs
-    ['visao','itens','vsfat','cruz'].forEach(tab => {
-      ['mb','mc'].forEach(env => {
-        const btn = document.getElementById(`esttab-${tab}-${env}`);
-        if(btn) btn.style.display = '';
-      });
+  });
+  // Ocultar botões de upload/limpar para consult
+  if(u.filiais && u.filiais.length > 0){
+    ['mb','mc'].forEach(env => {
+      document.querySelectorAll(`[onclick="openEstUpload('${env}')"]`).forEach(el => el.style.display='none');
+      const limpar = document.getElementById(`est-limpar-${env}`);
+      if(limpar) limpar.style.display='none';
     });
   }
 }
@@ -10007,13 +9995,20 @@ function getEstAllItems(env){
   const snaps=EST_DATA[env].snapshots;
   const periods=EST_F[env].periodos;
   const items=[];
+  // ✅ FIX: filtrar pelo núcleo do usuário — não mostrar dados de outro núcleo
+  const authFils = window._authFiliais;
   Object.entries(snaps).forEach(([k,arr])=>{
-    // Migração inline: normalizar tec de dados antigos que vieram com valores inesperados
     if(arr.length && arr[0].tec !== 'SIM' && arr[0].tec !== 'NÃO'){
       snaps[k]=arr.map(i=>Object.assign({},i,{tec:_normTec(i.tec)}));
       arr=snaps[k];
     }
-    if(periods.has(k)) items.push(...arr);
+    if(periods.has(k)){
+      // Filtrar por filiais permitidas ao usuário
+      const filtered = authFils && authFils.length
+        ? arr.filter(i => authFils.some(af => af.toLowerCase()===( i.filial||'').toLowerCase()))
+        : arr;
+      items.push(...filtered);
+    }
   });
   return items;
 }
