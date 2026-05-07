@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.26 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.27 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -9065,6 +9065,15 @@ function authApplyPermissions(){
   } else {
     window._authFiliais = null;
     window._authNucleo  = null;
+    // ✅ Restaurar todos os chips de núcleo e filial para admin/full
+    setTimeout(()=>{
+      ['MB','MC'].forEach(env=>{
+        const wrap = document.getElementById('fNucleo'+env);
+        if(wrap) wrap.querySelectorAll('.chip').forEach(c=>{ c.style.display=''; });
+        const fwrap = document.getElementById('fFil'+env);
+        if(fwrap) fwrap.querySelectorAll('.chip').forEach(c=>{ c.style.display=''; c.style.cursor=''; c.title=''; });
+      });
+    }, 100);
   }
 
   // Aba Estoque — usuários com filiais restritas só veem Cruzamento de Curvas
