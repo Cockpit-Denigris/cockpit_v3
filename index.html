@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.24 | Gerado em: 06/05/2026 | Fix1-9: anteriores | Fix10: usuários persistidos no Sheets entre devices -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.26 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -2283,11 +2283,9 @@ async function sincronizarEstoqueComSheets(ambiente) {
       
       return dadosSheets;
     } else {
-      // Sheets sem estoque — limpar localStorage também para não mostrar dados velhos
-      localStorage.removeItem('dn_est_v2');
-      EST_DATA.mb = { snapshots:{} };
-      EST_DATA.mc = { snapshots:{} };
-      console.log('📦 Sem estoque no Sheets — localStorage limpo');
+      // ✅ FIX: Sheets sem estoque para este ambiente — limpar só este ambiente
+      EST_DATA[ambiente] = { snapshots:{} };
+      console.log(`📦 Sem estoque no Sheets para ${ambiente}`);
       return null;
     }
     
