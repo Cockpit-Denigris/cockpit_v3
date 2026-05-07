@@ -1141,12 +1141,7 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
 
       <div class="main" id="est-main-mb" style="padding-top:16px">
         <!-- EMPTY STATE -->
-        <div id="est-empty-mb" class="cc" style="text-align:center;padding:60px 20px">
-          <div style="font-size:36px;margin-bottom:12px">📦</div>
-          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:6px">Estoque de Peças</div>
-          <div style="font-size:12px;color:var(--txt3);margin-bottom:20px">Carregue o relatório de estoque para visualizar os indicadores</div>
-          <button class="meta-save-btn" style="width:auto;padding:10px 28px" onclick="openEstUpload('mb')">⬆ Carregar Estoque</button>
-        </div>
+        <div id="est-empty-mb" style="display:none"></div>
 
         <!-- ═══ SUB-TAB: VISÃO GERAL ═══ -->
         <div id="est-pg-visao-mb" style="display:none">
@@ -1650,12 +1645,7 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
       </div>
     </div>
     <div class="tab-page" id="mc-est">
-      <div id="est-empty-mc" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;color:var(--txt3)">
-        <div style="font-size:40px;margin-bottom:12px">📦</div>
-        <div style="font-size:16px;font-weight:700;margin-bottom:6px">Nenhum arquivo de estoque carregado</div>
-        <div style="font-size:12px;margin-bottom:16px">Carregue o arquivo de estoque para visualizar os indicadores</div>
-        <button class="ibtn prime-mc" onclick="openEstUpload('mc')">⬆ Carregar Estoque</button>
-      </div>
+      <div id="est-empty-mc" style="display:none"></div>
       <div id="est-pg-visao-mc">
         <div id="est-kpis-mc" class="g4 mb12"></div>
         <div class="cc mb12"><div class="cc-hd"><div class="cc-title">🚦 Mobilidade por Linha de Produto</div><span class="badge bmc" id="est-mob-badge-mc">—</span></div><div id="est-mob-cards-mc"></div><div id="est-mob-mix-wrap-mc"></div></div>
@@ -9073,27 +9063,18 @@ function authApplyPermissions(){
 
   // Aba Estoque — usuários com filiais restritas só veem Cruzamento de Curvas
   if(u.filiais && u.filiais.length > 0){
-    // Ocultar tabs que não são Cruzamento de Curvas no estoque
-    ['visao','itens','vsfat'].forEach(tab => {
-      ['mb','mc'].forEach(env => {
-        const btn = document.getElementById(`esttab-${tab}-${env}`);
-        if(btn) btn.style.display = 'none';
-      });
-    });
-    // Forçar aba cruzamento como ativa
+    // ✅ FIX 15b: consult vê todas as abas do estoque — só ocultar Limpar Estoque
+    // Todas as abas (visao, itens, cruz, vsfat) ficam visíveis para consult
+    // ✅ FIX 15a: ocultar apenas botões de upload para consult — todas as abas visíveis
     ['mb','mc'].forEach(env => {
-      const btnCruz = document.getElementById(`esttab-cruz-${env}`);
-      if(btnCruz){ btnCruz.classList.add('mb-on'); }
-    });
-    // ✅ FIX 11a + 12a + 13a: ocultar botões e banner estoque para consult
-    ['mb','mc'].forEach(env => {
-      // Ocultar todos os botões que chamam openEstUpload
+      // Ocultar botões Carregar Estoque
       document.querySelectorAll(`[onclick="openEstUpload('${env}')"]`).forEach(el => el.style.display = 'none');
-      // Ocultar o bloco est-empty inteiro permanentemente para consult
+      // Ocultar Limpar Estoque
+      const limparBtn = document.getElementById(`est-limpar-${env}`);
+      if(limparBtn) limparBtn.style.display = 'none';
+      // Ocultar banner vazio
       const emptyEl = document.getElementById(`est-empty-${env}`);
       if(emptyEl){ emptyEl.style.display = 'none'; emptyEl.dataset.forceHide = '1'; }
-      // ✅ FIX 13a: forçar aba Cruzamento como ativa para consult
-      _estCurTab[env] = 'cruz';
     });
   } else {
     // Admin/full — mostrar todas as tabs
@@ -10045,12 +10026,19 @@ function initEstFilters(env){
   if(!EST_F[env].periodos.size||![...EST_F[env].periodos].every(p=>keys.includes(p))){
     EST_F[env].periodos=new Set(keys);
   }
-  // ✅ FIX 12b: restringir filiais do estoque às permitidas ao usuário
+  // ✅ FIX 12b + 15c: restringir filiais do estoque às permitidas ao usuário
+  // Usa comparação case-insensitive para evitar mismatch de nomes
   const _authFilEst = window._authFiliais;
   const filiaisPermitidas = _authFilEst && _authFilEst.length
-    ? filiais.filter(f => _authFilEst.includes(f))
+    ? filiais.filter(f => _authFilEst.some(af => 
+        af.toLowerCase() === f.toLowerCase() || 
+        f.toLowerCase().includes(af.toLowerCase()) ||
+        af.toLowerCase().includes(f.toLowerCase())
+      ))
     : filiais;
-  EST_F[env].filiais=new Set(filiaisPermitidas);
+  // Se nenhuma filial bater, usar todas (evita filtro zerado)
+  EST_F[env].filiais=new Set(filiaisPermitidas.length ? filiaisPermitidas : filiais);
+  console.log(`[Estoque ${env}] filiais nos dados:`, filiais, '| permitidas:', filiaisPermitidas);
   EST_F[env].mobs=new Set();   // vazio = todos passam
   EST_F[env].curvas=new Set(); // vazio = todos passam
   EST_F[env].tec=new Set(['SIM','NÃO']);
