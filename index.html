@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.35 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.36 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -10044,36 +10044,35 @@ function saveEstState(){
       mc:{snapshots:EST_DATA.mc.snapshots, filialUpdates:EST_DATA.mc.filialUpdates||{}}
     }));
   }catch(e){}
-  
-  // ═══ GOOGLE SHEETS SYNC ═══════════════════════════════════════
+  // Sheets sync em função async separada para não quebrar saveEstState
+  _syncEstoqueSheets();
+}
+
+async function _syncEstoqueSheets(){
   if(window._modoImportacaoAtivo){ console.log('📦 Modo Importação — estoque adiado'); return; }
-  if (SHEETS_CONFIG && SHEETS_CONFIG.enabled) {
-    // ✅ Sync inteligente por modo: substituir = delete granular + append | acumular = append direto
-    for(const env of ['mb','mc']){
-      const snapshots = EST_DATA[env]?.snapshots || {};
-      const allItems = Object.values(snapshots).flat();
-      if(!allItems.length) continue;
-      const modoSync = _estModo[env] || 'substituir';
-      const filiaisSync = [...new Set(allItems.map(i=>i.filial).filter(Boolean))];
-      try{
-        if(modoSync === 'substituir'){
-          // Delete granular por filial + append das filiais do arquivo
-          const itemsSync = allItems.filter(i => filiaisSync.includes(i.filial));
-          for(const fil of filiaisSync){
-            await limparDoSheets('estoque', env, { filial: fil });
-            console.log(`🗑️ Estoque ${fil} limpo no Sheets`);
-          }
-          await enviarParaSheets('estoque', env, itemsSync, 'append');
-          console.log(`✅ Estoque substituído no Sheets: ${filiaisSync.join(', ')} (${itemsSync.length} itens)`);
-        } else {
-          // Acumular: só append das filiais novas
-          const itemsNovos = allItems.filter(i => filiaisSync.includes(i.filial));
-          await enviarParaSheets('estoque', env, itemsNovos, 'append');
-          console.log(`✅ Estoque acumulado no Sheets: ${filiaisSync.join(', ')} (${itemsNovos.length} itens)`);
+  if(!SHEETS_CONFIG || !SHEETS_CONFIG.enabled) return;
+  for(const env of ['mb','mc']){
+    const snapshots = EST_DATA[env]?.snapshots || {};
+    const allItems = Object.values(snapshots).flat();
+    if(!allItems.length) continue;
+    const modoSync = _estModo[env] || 'substituir';
+    const filiaisSync = [...new Set(allItems.map(i=>i.filial).filter(Boolean))];
+    try{
+      if(modoSync === 'substituir'){
+        const itemsSync = allItems.filter(i => filiaisSync.includes(i.filial));
+        for(const fil of filiaisSync){
+          await limparDoSheets('estoque', env, { filial: fil });
         }
-        mostrarToastSync(`✅ Estoque sincronizado com Sheets`, 'success');
-      } catch(err){ console.warn('⚠️ Erro ao sincronizar estoque:', err); }
-    }
+        await enviarParaSheets('estoque', env, itemsSync, 'append');
+        console.log(`✅ Estoque substituído: ${filiaisSync.join(', ')} (${itemsSync.length} itens)`);
+      } else {
+        const itemsNovos = allItems.filter(i => filiaisSync.includes(i.filial));
+        await enviarParaSheets('estoque', env, itemsNovos, 'append');
+        console.log(`✅ Estoque acumulado: ${filiaisSync.join(', ')} (${itemsNovos.length} itens)`);
+      }
+      mostrarToastSync(`✅ Estoque sincronizado com Sheets`, 'success');
+    } catch(err){ console.warn('⚠️ Erro ao sincronizar estoque:', err); }
+  }
   }
   // ══════════════════════════════════════════════════════════════
 }
