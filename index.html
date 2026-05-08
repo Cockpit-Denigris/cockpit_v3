@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.28 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.29 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -3916,8 +3916,8 @@ function initFilialChips(env){
   const authFils = window._authFiliais;
   if(authFils && authFils.length){
     filsNoDado = filsNoDado.filter(f => authFils.includes(f));
-    // Forçar seleção apenas das filiais permitidas
-    F[env].filial = new Set(filsNoDado);
+    // ✅ Manter 'all' para que _baseFilter funcione — chips mostram só as filiais do núcleo
+    F[env].filial = new Set(['all']);
   }
 
   const selAtual = new Set([...F[env].filial]);
@@ -10030,7 +10030,14 @@ function initEstFilters(env){
   const keys=Object.keys(snaps).sort();
   if(!keys.length){ renderEstoque(env); return; }
 
-  const allItems=Object.values(snaps).flat();
+  const allItemsRaw=Object.values(snaps).flat();
+  // ✅ FIX: filtrar itens pelo núcleo do usuário antes de inicializar
+  const authFilsEst = window._authFiliais;
+  const allItems = authFilsEst && authFilsEst.length
+    ? allItemsRaw.filter(i => authFilsEst.some(af => af.toLowerCase()===(i.filial||'').toLowerCase()))
+    : allItemsRaw;
+  // Se não há itens para este núcleo, mostrar estoque vazio
+  if(!allItems.length && authFilsEst && authFilsEst.length){ renderEstoque(env); return; }
   const filiais=[...new Set(allItems.map(i=>i.filial))].sort();
   const mobs=[...new Set(allItems.map(i=>i.mobCls))].filter(Boolean);
 
