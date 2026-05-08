@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.29 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.31 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -6422,12 +6422,13 @@ function renderStatusStrip(env){
 }
 
 function buildStatusInline(env){
-  const db=DB[env]||[];
+  const _af=window._authFiliais;
+  const db=(DB[env]||[]).filter(r=>!_af||!_af.length||_af.includes(r.Filial));
   const fontes={dre:0,dms:0,os:0,manual:0};
   db.forEach(r=>{ const f=r._fonte||'manual'; fontes[f]=(fontes[f]||0)+1; });
   const filiais=[...new Set(db.map(r=>r.Filial))].filter(Boolean);
   const anos=[...new Set(db.map(r=>r.Ano))].sort();
-  const nMetas=Object.keys(METAS).filter(k=>+METAS[k]>0).length;
+  const nMetas=Object.keys(METAS).filter(k=>+METAS[k]>0&&(!_af||!_af.length||_af.includes(k.split('|')[0]))).length;
   const tags=[];
 
   // DRE — mostrar período coberto com destaque
@@ -6472,8 +6473,9 @@ function buildStatusInline(env){
 }
 
 function buildStatusHTML(env){
-  const db=DB[env]||[];
-  const metas=Object.keys(METAS).filter(k=>+METAS[k]>0);
+  const _af=window._authFiliais;
+  const db=(DB[env]||[]).filter(r=>!_af||!_af.length||_af.includes(r.Filial));
+  const metas=Object.keys(METAS).filter(k=>+METAS[k]>0&&(!_af||!_af.length||_af.includes(k.split('|')[0])));
   if(!db.length && !metas.length) return '<div style="color:var(--txt3);text-align:center;padding:20px">Nenhum dado carregado ainda.</div>';
 
   const FILIAIS=['Itapeva','Sorocaba','Itu','Alumínio'];
@@ -9068,7 +9070,22 @@ function authApplyPermissions(){
         const fwrap = document.getElementById('fFil'+env);
         if(fwrap) fwrap.querySelectorAll('.chip').forEach(c=>{ c.style.display=''; c.style.cursor=''; c.title=''; });
       });
+      // Restaurar botões para admin/full
+      ['btn-html-snap','btn-import','btn-modo-import','btn-gs-config',
+       'btn-export','btn-upload-mb','btn-upload-mc','btn-metas','btn-status'].forEach(id=>{
+        const el=document.getElementById(id);
+        if(el) el.style.display='';
+      });
     }, 100);
+  }
+
+  // ✅ Ocultar botões de ação para consult
+  if(u.filiais && u.filiais.length > 0){
+    ['btn-html-snap','btn-import','btn-modo-import','btn-gs-config',
+     'btn-export','btn-upload-mb','btn-upload-mc','btn-metas','btn-status'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.style.display='none';
+    });
   }
 
   // ✅ FIX: todas as abas visíveis para todos os usuários
