@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.37 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.38 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -7096,7 +7096,7 @@ const FILIAL_MAP=[
   {keys:['SOROCABA'],                                    nome:'Sorocaba'},
   {keys:['ITU'],                                                  nome:'Itu'},
   // DN SJC
-  {keys:['SJC','SAO JOSE','SÃO JOSÉ','SJCAMPOS','S.J.'],         nome:'DN SJC'},
+  {keys:['SJC','SAO JOSE','SÃO JOSÉ','SÃO JOSE','SAO JOSÉ','SJCAMPOS','S.J.','JOSE DOS CAMPOS','SJC DOS CAMPOS'], nome:'DN SJC'},
   // Novas filiais (auto-detect)
   {keys:['ROSEIRA'],                                              nome:'Roseira'},
   {keys:['SBC','BERNARDO','S.B.C'],                               nome:'SBC'},
@@ -10038,13 +10038,21 @@ function applyEstSnapPorFilial(env, perioKey, items, filiaisNovas, modo='substit
 
 // ── Persist ─────────────────────────────────────────────────
 function saveEstState(){
+  const data = JSON.stringify({
+    mb:{snapshots:EST_DATA.mb.snapshots, filialUpdates:EST_DATA.mb.filialUpdates||{}},
+    mc:{snapshots:EST_DATA.mc.snapshots, filialUpdates:EST_DATA.mc.filialUpdates||{}}
+  });
   try{
-    localStorage.setItem('dn_est_v2',JSON.stringify({
-      mb:{snapshots:EST_DATA.mb.snapshots, filialUpdates:EST_DATA.mb.filialUpdates||{}},
-      mc:{snapshots:EST_DATA.mc.snapshots, filialUpdates:EST_DATA.mc.filialUpdates||{}}
-    }));
-  }catch(e){}
-  // Sheets sync em função async separada para não quebrar saveEstState
+    localStorage.setItem('dn_est_v2', data);
+  } catch(e){
+    // ✅ QuotaExceededError: fallback para IndexedDB quando localStorage está cheio
+    if(e.name === 'QuotaExceededError' || e.code === 22){
+      console.warn('⚠️ localStorage cheio — salvando estoque no IndexedDB');
+      _idbSave('dn_est_v2', data).catch(()=>{});
+      localStorage.removeItem('dn_est_v2'); // garantir que não há versão parcial
+    }
+  }
+  // Sheets sync em função async separada
   _syncEstoqueSheets();
 }
 
@@ -10076,8 +10084,19 @@ async function _syncEstoqueSheets(){
 }
 function loadEstState(){
   try{
-    const s=localStorage.getItem('dn_est_v2');
-    if(!s) return;
+    let s=localStorage.getItem('dn_est_v2');
+    // ✅ Tentar IDB se localStorage vazio (fallback de quota)
+    if(!s){
+      _idbLoad('dn_est_v2').then(idbData=>{
+        if(idbData){ try{
+          const d=JSON.parse(idbData);
+          if(d.mb&&d.mb.snapshots) EST_DATA.mb=d.mb;
+          if(d.mc&&d.mc.snapshots) EST_DATA.mc=d.mc;
+          initEstFilters('mb'); renderEstoque('mb');
+        }catch{}}
+      }).catch(()=>{});
+      return;
+    }
     const d=JSON.parse(s);
     if(d.mb&&d.mb.snapshots) EST_DATA.mb=d.mb;
     if(d.mc&&d.mc.snapshots) EST_DATA.mc=d.mc;
