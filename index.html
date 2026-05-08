@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.34 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.35 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -1377,8 +1377,18 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
           <div style="margin:10px 0 12px;font-size:11px;color:var(--txt3)">
             Formato: <strong>Plan 1</strong> · colunas: Filial · Custo Total · Dias em Estoque · Mobilidade · Curva · Grupo · Código
           </div>
-          <div style="margin-bottom:12px;padding:8px 10px;background:var(--card2);border-radius:6px;border-left:3px solid var(--mb);font-size:11px;color:var(--txt2)">
-            ℹ️ Cada novo arquivo carregado <strong>substitui automaticamente</strong> o arquivo anterior.
+          <div style="margin-bottom:12px">
+            <div style="font-size:11px;color:var(--txt3);margin-bottom:6px">Modo de importação:</div>
+            <div style="display:flex;gap:6px">
+              <button id="est-modo-sub-mb" class="meta-save-btn" style="flex:1;font-size:11px;padding:7px"
+                onclick="setEstModo('mb','substituir')" title="Apaga os dados da filial do arquivo e insere os novos">
+                🔄 Substituir
+              </button>
+              <button id="est-modo-acu-mb" class="meta-save-btn" style="flex:1;font-size:11px;padding:7px;background:var(--card2);color:var(--txt2);border:1px solid var(--brd)"
+                onclick="setEstModo('mb','acumular')" title="Adiciona sem apagar — use para primeira importação de nova filial">
+                ➕ Acumular
+              </button>
+            </div>
           </div>
           <div id="est-up-drop-mb"
             style="border:2px dashed var(--brd);border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:border-color .15s;margin-bottom:10px"
@@ -9704,6 +9714,22 @@ const MOB_COL   = { rapido:'#00e090', lento:'#ffb800', parado:'#ff3a5c' };
 const MOB_LBL   = { rapido:'Rápido (1-179d)', lento:'Lento (180-359d)', parado:'Parado (360+d)' };
 
 // ── Upload UI ───────────────────────────────────────────────
+// ✅ Estado do modo de importação de estoque
+const _estModo = { mb: 'substituir', mc: 'substituir' };
+
+function setEstModo(env, modo){
+  _estModo[env] = modo;
+  const subBtn = document.getElementById(`est-modo-sub-${env}`);
+  const acuBtn = document.getElementById(`est-modo-acu-${env}`);
+  if(modo === 'substituir'){
+    if(subBtn){ subBtn.style.background='var(--mb)'; subBtn.style.color='#fff'; subBtn.style.border='none'; }
+    if(acuBtn){ acuBtn.style.background='var(--card2)'; acuBtn.style.color='var(--txt2)'; acuBtn.style.border='1px solid var(--brd)'; }
+  } else {
+    if(acuBtn){ acuBtn.style.background='var(--grn)'; acuBtn.style.color='#fff'; acuBtn.style.border='none'; }
+    if(subBtn){ subBtn.style.background='var(--card2)'; subBtn.style.color='var(--txt2)'; subBtn.style.border='1px solid var(--brd)'; }
+  }
+}
+
 function openEstUpload(env){
   renderEstLoadedPeriods(env);
   document.getElementById(`est-upov-${env}`).classList.add('open');
@@ -9938,12 +9964,12 @@ function handleEstFile(file, env){
 
       if(!items.length) throw new Error('Nenhum item encontrado. Verifique a aba "Plan 1".');
 
-      // Substituir apenas as filiais presentes no arquivo — manter as demais intactas
+      // Aplicar modo: substituir (remove filial + insere) ou acumular (só adiciona)
       const filiais=[...new Set(items.map(i=>i.filial))];
       const updatedAt = new Date().toISOString();
-      // Adicionar _updatedAt e _filialKey em cada item
       items.forEach(i=>{ i._updatedAt=updatedAt; });
-      applyEstSnapPorFilial(env, perioKey, items, filiais);
+      const modoEst = _estModo[env] || 'substituir';
+      applyEstSnapPorFilial(env, perioKey, items, filiais, modoEst);
       const totalVal=items.reduce((s,i)=>s+i.valor,0);
       st.textContent=`✅ ${items.length.toLocaleString('pt-BR')} itens carregados`;
       st.style.color='var(--grn)';
@@ -9981,16 +10007,21 @@ function applyEstSnap(env, perioKey, items, replace){
 
 // ── Substituir estoque apenas das filiais presentes no arquivo ──
 // Mantém intactas as filiais que não estão no novo arquivo
-function applyEstSnapPorFilial(env, perioKey, items, filiaisNovas){
+function applyEstSnapPorFilial(env, perioKey, items, filiaisNovas, modo='substituir'){
   const normalized = items.map(i=>i.tec==='SIM'||i.tec==='NÃO'?i:Object.assign({},i,{tec:_normTec(i.tec)}));
   const filSet = new Set(filiaisNovas);
   const snap = EST_DATA[env].snapshots;
-
-  // Remover apenas as filiais do novo arquivo do snapshot atual
   const existentes = snap[perioKey] || [];
-  const mantidos = existentes.filter(i => !filSet.has(i.filial));
 
-  // Combinar mantidos + novos
+  let mantidos;
+  if(modo === 'acumular'){
+    // ✅ Acumular: mantém tudo, apenas adiciona novos itens
+    mantidos = existentes;
+  } else {
+    // ✅ Substituir: remove filiais do arquivo e insere novas
+    mantidos = existentes.filter(i => !filSet.has(i.filial));
+  }
+
   snap[perioKey] = [...mantidos, ...normalized];
 
   // Atualizar registro de última atualização por filial
@@ -10017,27 +10048,32 @@ function saveEstState(){
   // ═══ GOOGLE SHEETS SYNC ═══════════════════════════════════════
   if(window._modoImportacaoAtivo){ console.log('📦 Modo Importação — estoque adiado'); return; }
   if (SHEETS_CONFIG && SHEETS_CONFIG.enabled) {
-    ['mb', 'mc'].forEach(async env => {
+    // ✅ Sync inteligente por modo: substituir = delete granular + append | acumular = append direto
+    for(const env of ['mb','mc']){
       const snapshots = EST_DATA[env]?.snapshots || {};
       const allItems = Object.values(snapshots).flat();
-      if (allItems.length > 0) {
-        // PASSO 1: Limpar aba existente
-        try {
-          await limparDoSheets('estoque', env);
-          console.log(`🗑️ Aba ESTOQUE_${env.toUpperCase()} limpa`);
-        } catch (error) {
-          console.warn(`⚠️ Erro ao limpar estoque ${env}:`, error);
+      if(!allItems.length) continue;
+      const modoSync = _estModo[env] || 'substituir';
+      const filiaisSync = [...new Set(allItems.map(i=>i.filial).filter(Boolean))];
+      try{
+        if(modoSync === 'substituir'){
+          // Delete granular por filial + append das filiais do arquivo
+          const itemsSync = allItems.filter(i => filiaisSync.includes(i.filial));
+          for(const fil of filiaisSync){
+            await limparDoSheets('estoque', env, { filial: fil });
+            console.log(`🗑️ Estoque ${fil} limpo no Sheets`);
+          }
+          await enviarParaSheets('estoque', env, itemsSync, 'append');
+          console.log(`✅ Estoque substituído no Sheets: ${filiaisSync.join(', ')} (${itemsSync.length} itens)`);
+        } else {
+          // Acumular: só append das filiais novas
+          const itemsNovos = allItems.filter(i => filiaisSync.includes(i.filial));
+          await enviarParaSheets('estoque', env, itemsNovos, 'append');
+          console.log(`✅ Estoque acumulado no Sheets: ${filiaisSync.join(', ')} (${itemsNovos.length} itens)`);
         }
-        
-        // PASSO 2: Adicionar novos dados
-        try {
-          await enviarParaSheets('estoque', env, allItems, 'append');
-          console.log(`✅ Estoque ${env.toUpperCase()} atualizado no Sheets (${allItems.length} itens)`);
-        } catch (error) {
-          console.warn(`⚠️ Erro ao enviar estoque ${env}:`, error);
-        }
-      }
-    });
+        mostrarToastSync(`✅ Estoque sincronizado com Sheets`, 'success');
+      } catch(err){ console.warn('⚠️ Erro ao sincronizar estoque:', err); }
+    }
   }
   // ══════════════════════════════════════════════════════════════
 }
