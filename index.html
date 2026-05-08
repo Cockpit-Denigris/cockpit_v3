@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.33 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.34 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -9792,23 +9792,57 @@ function deleteEstPeriodo(env, key){
 }
 
 function clearEstoque(env){
+  // ✅ Obter filiais disponíveis no estoque
+  const allItems = Object.values(EST_DATA[env]?.snapshots||{}).flat();
+  const filiais = [...new Set(allItems.map(i=>i.filial).filter(Boolean))].sort();
+
+  if(!filiais.length){
+    _admConfirm('Nenhum estoque carregado.','',()=>{});
+    return;
+  }
+
+  // Montar opções de filial + "Todas"
+  const opts = ['— Todas as filiais —', ...filiais];
+  const select = `<select id="est-clear-sel" style="margin-top:10px;width:100%;padding:8px;background:var(--card2);color:var(--txt);border:1px solid var(--brd);border-radius:6px;font-size:13px">
+    ${opts.map(f=>`<option value="${f}">${f}</option>`).join('')}
+  </select>`;
+
   _admConfirm(
-    'Apagar todos os dados de estoque?',
-    'Esta ação vai limpar estoque do navegador E do Google Sheets. Não pode ser desfeita.',
+    'Apagar dados de estoque?',
+    `Selecione a filial a apagar:<br>${select}<br><small style="color:var(--txt3)">Esta ação remove do navegador E do Google Sheets. Não pode ser desfeita.</small>`,
     async ()=>{
-      EST_DATA[env].snapshots={};
+      const sel = document.getElementById('est-clear-sel');
+      const filialSel = sel ? sel.value : '— Todas as filiais —';
+      const limparTudo = filialSel === '— Todas as filiais —';
+
+      if(limparTudo){
+        // Apagar tudo
+        EST_DATA[env].snapshots={};
+      } else {
+        // Apagar só a filial selecionada de cada snapshot
+        Object.keys(EST_DATA[env].snapshots).forEach(k=>{
+          EST_DATA[env].snapshots[k] = EST_DATA[env].snapshots[k].filter(i=>i.filial !== filialSel);
+          if(!EST_DATA[env].snapshots[k].length) delete EST_DATA[env].snapshots[k];
+        });
+      }
+
       saveEstState();
       initEstFilters(env);
       renderEstoque(env);
-      
-      // ═══ LIMPAR DO GOOGLE SHEETS ═══════════════════════════════
-      if (SHEETS_CONFIG && SHEETS_CONFIG.enabled) {
-        try {
-          await limparDoSheets('estoque', env);
-          mostrarToastSync(`✅ Estoque ${env.toUpperCase()} limpo (navegador + Sheets)`, 'success');
-        } catch (error) {
-          console.warn(`⚠️ Erro ao limpar estoque do Sheets:`, error);
-        }
+
+      // ═══ SINCRONIZAR COM SHEETS ═══════════════════════════════
+      if(SHEETS_CONFIG && SHEETS_CONFIG.enabled){
+        try{
+          if(limparTudo){
+            // Delete total da aba
+            await limparDoSheets('estoque', env);
+            mostrarToastSync(`✅ Estoque limpo — todas as filiais`, 'success');
+          } else {
+            // Delete granular por filial + reenviar o restante
+            await limparDoSheets('estoque', env, { filial: filialSel });
+            mostrarToastSync(`✅ Estoque de ${filialSel} removido`, 'success');
+          }
+        } catch(err){ console.warn('⚠️ Erro ao limpar estoque do Sheets:', err); }
       }
       // ════════════════════════════════════════════════════════════
     }
