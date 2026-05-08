@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.31 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.33 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -3735,9 +3735,11 @@ function switchEnv(env){
   const mbActions=['btn-status','btn-metas','btn-upload-mb','btn-adm-mb','btn-export','btn-import','btn-gs-config','btn-html-snap','btn-status','save-indicator','usr-chip-mb'];
   // show/hide MC upload button (it lives in navbar-r for MC)
   const mcUpBtn=document.getElementById('btn-upload-mc');
-  if(mcUpBtn) mcUpBtn.style.display = env==='mc' ? '' : 'none';
+  // ✅ Só mostrar botões upload se usuário tem permissão (não consult)
+  const _canUpload = !window._authFiliais || !window._authFiliais.length;
+  if(mcUpBtn) mcUpBtn.style.display = (env==='mc' && _canUpload) ? '' : 'none';
   const mbUpBtn=document.getElementById('btn-upload-mb');
-  if(mbUpBtn) mbUpBtn.style.display = env==='mb' ? '' : 'none';
+  if(mbUpBtn) mbUpBtn.style.display = (env==='mb' && _canUpload) ? '' : 'none';
   setTimeout(()=>renderAll(env),40);
 }
 var _fatSubCur={mb:'seg',mc:'seg'};
@@ -4141,7 +4143,10 @@ function _filNormSet(env){
 }
 
 function _baseFilter(env,r){
-  if(r._fonte==='os') return false;  // OS rows são exclusivos da tabela Tipo OS — nunca alimentam outros módulos
+  if(r._fonte==='os') return false;
+  // ✅ Restrição por núcleo — aplicada antes do filtro de filial selecionada
+  const _af = window._authFiliais;
+  if(_af && _af.length && !_af.includes(r.Filial)) return false;
   if(!F[env].filial.has('all') && !_filNormSet(env).has(_normFil(r.Filial))) return false;
   if(!(F[env].mes.has('all')||F[env].mes.has(String(r.Mês_Num))))return false;
   if(!(F[env].depto.has('all')||F[env].depto.has(r.Canal)))return false;
@@ -4160,13 +4165,13 @@ function getRowsOS(env){
   const filSel = F[env].filial;
   const filNorms = filSel.has('all') ? null : new Set([...filSel].map(normF));
 
+  const _afOS = window._authFiliais;
   return DB[env].filter(r=>{
     if(r._fonte!=='os') return false;
-    // Filial: normalizar para garantir match mesmo com variações de acento/case
-    // Rows com Filial='—' ou vazia = filial não detectada no import → incluir sempre
-    // (o arquivo foi carregado para alguma filial, mas o header não tinha o campo)
     const rFilial = normF(r.Filial);
     const filialDesconhecida = !r.Filial || r.Filial === '—' || rFilial === '';
+    // ✅ Restrição por núcleo para OS
+    if(_afOS && _afOS.length && !filialDesconhecida && !_afOS.some(af=>normF(af)===rFilial)) return false;
     if(filNorms !== null && !filialDesconhecida && !filNorms.has(rFilial)) return false;
     // Mês_Num=0 significa arquivo anual (todos os meses) — sempre passa
     if(r.Mês_Num !== 0 && !(F[env].mes.has('all')||F[env].mes.has(String(r.Mês_Num)))) return false;
@@ -4187,8 +4192,11 @@ function getRows(env){return getRowsFor(env,'mainAnos');}
 // without year or depto filter (for comparativo, segmentos base)
 // NÃO aplica filtro de mês — comparativo mostra acumulado completo de cada ano
 function getRowsNoAno(env){
+  const _af2 = window._authFiliais;
   const base = DB[env].filter(r=>{
     if(r._fonte==='os') return false;
+    // ✅ Restrição por núcleo no comparativo
+    if(_af2 && _af2.length && !_af2.includes(r.Filial)) return false;
     if(!(F[env].filial.has('all')||F[env].filial.has(r.Filial)))return false;
     // Depto filter applies (canal), but NOT mes filter — comparativo must show full year
     if(!(F[env].depto.has('all')||F[env].depto.has(r.Canal)))return false;
@@ -4263,12 +4271,14 @@ function getRowsYTD(env){
   const mesMax=Math.max(...mesSel);
   const mesMin=1; // sempre acumula a partir de Janeiro
 
+  const _afAcum = window._authFiliais;
   return applyDREPriority(DB[env].filter(r=>{
     if(r._fonte==='os') return false;
+    if(_afAcum && _afAcum.length && !_afAcum.includes(r.Filial)) return false;
     if(!(F[env].filial.has('all')||F[env].filial.has(r.Filial))) return false;
     if(!anos.has(String(r.Ano))) return false;
     if(!(F[env].depto.has('all')||F[env].depto.has(r.Canal))) return false;
-    return r.Mês_Num>=mesMin && r.Mês_Num<=mesMax; // jan → mesMax
+    return r.Mês_Num>=mesMin && r.Mês_Num<=mesMax;
   }));
 }
 
@@ -5119,8 +5129,10 @@ function renderCanais(env,rows){
   }
   // Participação sempre sobre todos os canais (sem filtro de depto)
   // DRE tem prioridade: para cada filial|ano|mes com DRE, descarta linhas DMS
+  const _afFull = window._authFiliais;
   const rowsFull=applyDREPriority(DB[env].filter(r=>{
     if(r._fonte==='os') return false;
+    if(_afFull && _afFull.length && !_afFull.includes(r.Filial)) return false;
     if(!(F[env].filial.has('all')||F[env].filial.has(r.Filial)))return false;
     if(!F[env].ano.has(String(r.Ano)))return false;
     if(!(F[env].mes.has('all')||F[env].mes.has(String(r.Mês_Num))))return false;
@@ -6333,9 +6345,11 @@ function renderAll(env){
   // Seg / Vend / CLI: apenas DMS transacional (nunca DRE)
   // DRE e oficial apenas para totais agregados (KPIs/Indicadores)
   // DMS cobre Segmento, Vendedor e Clientes com dados granulares
+  const _afAll = window._authFiliais;
   const rowsAllAnos=DB[env].filter(r=>{
     if(r._fonte==='os')  return false;
     if(r._fonte==='dre') return false;
+    if(_afAll && _afAll.length && !_afAll.includes(r.Filial)) return false;
     if(!(F[env].filial.has('all')||F[env].filial.has(r.Filial)))return false;
     if(!(F[env].mes.has('all')||F[env].mes.has(String(r.Mês_Num))))return false;
     if(!(F[env].depto.has('all')||F[env].depto.has(r.Canal)))return false;
