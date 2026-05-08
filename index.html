@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.36 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.37 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -10073,8 +10073,6 @@ async function _syncEstoqueSheets(){
       mostrarToastSync(`✅ Estoque sincronizado com Sheets`, 'success');
     } catch(err){ console.warn('⚠️ Erro ao sincronizar estoque:', err); }
   }
-  }
-  // ══════════════════════════════════════════════════════════════
 }
 function loadEstState(){
   try{
