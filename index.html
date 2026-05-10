@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.39 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.40 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -3928,8 +3928,9 @@ function initFilialChips(env){
   const authFils = window._authFiliais;
   if(authFils && authFils.length){
     filsNoDado = filsNoDado.filter(f => authFils.includes(f));
-    // ✅ Manter 'all' para que _baseFilter funcione — chips mostram só as filiais do núcleo
-    F[env].filial = new Set(['all']);
+    // ✅ Popular F[env].filial com as filiais reais do núcleo
+    // Assim fTogFilial funciona corretamente ao desmarcar/marcar individualmente
+    F[env].filial = new Set(filsNoDado.length ? filsNoDado : ['all']);
   }
 
   const selAtual = new Set([...F[env].filial]);
