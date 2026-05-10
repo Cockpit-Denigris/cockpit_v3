@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.44 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.45 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -3030,6 +3030,46 @@ const CANAL_OFIC='Oficina/Funilaria';
 ═══════════════════════════════════════════════ */
 const LS_KEY='denigris_v3';
 const IDB_NAME='denigrisDB'; const IDB_STORE='state'; const IDB_KEY='main';
+const IDB_EST_STORE='estoque'; // store separada para estoque (pode ser grande)
+
+function _idbSetEst(data){
+  return new Promise((res,rej)=>{
+    const req=indexedDB.open(IDB_NAME,2);
+    req.onupgradeneeded=e=>{
+      const db=e.target.result;
+      if(!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+      if(!db.objectStoreNames.contains(IDB_EST_STORE)) db.createObjectStore(IDB_EST_STORE);
+    };
+    req.onsuccess=e=>{
+      const db=e.target.result;
+      const tx=db.transaction(IDB_EST_STORE,'readwrite');
+      tx.objectStore(IDB_EST_STORE).put(data,'est');
+      tx.oncomplete=()=>res();
+      tx.onerror=()=>rej(tx.error);
+    };
+    req.onerror=()=>rej(req.error);
+  });
+}
+
+function _idbGetEst(){
+  return new Promise((res,rej)=>{
+    const req=indexedDB.open(IDB_NAME,2);
+    req.onupgradeneeded=e=>{
+      const db=e.target.result;
+      if(!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+      if(!db.objectStoreNames.contains(IDB_EST_STORE)) db.createObjectStore(IDB_EST_STORE);
+    };
+    req.onsuccess=e=>{
+      const db=e.target.result;
+      if(!db.objectStoreNames.contains(IDB_EST_STORE)){ res(null); return; }
+      const tx=db.transaction(IDB_EST_STORE,'readonly');
+      const r=tx.objectStore(IDB_EST_STORE).get('est');
+      r.onsuccess=()=>res(r.result||null);
+      r.onerror=()=>rej(r.error);
+    };
+    req.onerror=()=>rej(req.error);
+  });
+}
 
 /* ── IndexedDB helpers ── */
 function idbOpen(){
@@ -9841,66 +9881,63 @@ function deleteEstPeriodo(env, key){
 }
 
 function clearEstoque(env){
-  // ✅ Obter filiais disponíveis no estoque
   const allItems = Object.values(EST_DATA[env]?.snapshots||{}).flat();
   const filiais = [...new Set(allItems.map(i=>i.filial).filter(Boolean))].sort();
 
-  if(!filiais.length){
-    _admConfirm('Nenhum estoque carregado.','',()=>{});
-    return;
-  }
+  if(!filiais.length){ _admConfirm('Nenhum estoque carregado.','',()=>{}); return; }
 
-  // Montar opções de filial + "Todas"
-  const opts = ['— Todas as filiais —', ...filiais];
-  const select = `<select id="est-clear-sel" style="margin-top:10px;width:100%;padding:8px;background:var(--card2);color:var(--txt);border:1px solid var(--brd);border-radius:6px;font-size:13px">
-    ${opts.map(f=>`<option value="${f}">${f}</option>`).join('')}
-  </select>`;
+  const checks = filiais.map(f=>
+    `<label style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
+      <input type="checkbox" class="est-clear-chk" value="${f}" style="width:14px;height:14px">
+      <span style="font-size:13px">${f}</span>
+    </label>`
+  ).join('');
 
   _admConfirm(
     'Apagar dados de estoque?',
-    `Selecione a filial a apagar:<br>${select}<br><small style="color:var(--txt3)">Esta ação remove do navegador E do Google Sheets. Não pode ser desfeita.</small>`,
+    `<div style="margin-bottom:8px;font-size:12px;color:var(--txt3)">Selecione as filiais a remover (período completo):</div>
+     <label style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
+       <input type="checkbox" id="est-clear-all" style="width:14px;height:14px">
+       <span style="font-size:13px;font-weight:700">Todas as filiais</span>
+     </label>
+     <hr style="border-color:var(--brd);margin:6px 0">
+     ${checks}
+     <small style="color:var(--txt3);margin-top:8px;display:block">Remove do navegador E do Sheets. Não pode ser desfeita.</small>`,
     async ()=>{
-      const sel = document.getElementById('est-clear-sel');
-      const filialSel = sel ? sel.value : '— Todas as filiais —';
-      const limparTudo = filialSel === '— Todas as filiais —';
+      const allChk = document.getElementById('est-clear-all');
+      const chks = [...document.querySelectorAll('.est-clear-chk:checked')];
+      const limparTudo = allChk && allChk.checked;
+      const filiaisSel = limparTudo ? filiais : chks.map(c=>c.value);
+      if(!filiaisSel.length) return;
 
       if(limparTudo){
-        // Apagar tudo
         EST_DATA[env].snapshots={};
       } else {
-        // Apagar só a filial selecionada de cada snapshot
         Object.keys(EST_DATA[env].snapshots).forEach(k=>{
-          EST_DATA[env].snapshots[k] = EST_DATA[env].snapshots[k].filter(i=>i.filial !== filialSel);
+          EST_DATA[env].snapshots[k] = EST_DATA[env].snapshots[k].filter(i=>!filiaisSel.includes(i.filial));
           if(!EST_DATA[env].snapshots[k].length) delete EST_DATA[env].snapshots[k];
         });
       }
-
       saveEstState();
       initEstFilters(env);
       renderEstoque(env);
 
-      // ═══ SINCRONIZAR COM SHEETS ═══════════════════════════════
       if(SHEETS_CONFIG && SHEETS_CONFIG.enabled){
         try{
-          if(limparTudo){
-            await limparDoSheets('estoque', env);
-            mostrarToastSync(`✅ Estoque limpo — todas as filiais`, 'success');
-          } else {
-            // ✅ FIX: delete_all + reenvia apenas as filiais que sobraram no banco local
-            const itensSobrando = Object.values(EST_DATA[env].snapshots).flat();
-            await limparDoSheets('estoque', env);
-            if(itensSobrando.length > 0){
-              await enviarParaSheets('estoque', env, itensSobrando, 'append');
-            }
-            mostrarToastSync(`✅ Estoque de ${filialSel} removido`, 'success');
-          }
-        } catch(err){ console.warn('⚠️ Erro ao limpar estoque do Sheets:', err); }
+          const itensSobrando = Object.values(EST_DATA[env].snapshots).flat();
+          await limparDoSheets('estoque', env);
+          if(itensSobrando.length > 0) await enviarParaSheets('estoque', env, itensSobrando, 'append');
+          mostrarToastSync(`✅ Estoque removido: ${limparTudo?'todas as filiais':filiaisSel.join(', ')}`, 'success');
+        } catch(err){ console.warn('⚠️ Erro ao limpar estoque:', err); }
       }
-      // ════════════════════════════════════════════════════════════
     }
   );
+  setTimeout(()=>{
+    const allChk = document.getElementById('est-clear-all');
+    if(allChk) allChk.onchange = ()=>
+      document.querySelectorAll('.est-clear-chk').forEach(c=>c.checked=allChk.checked);
+  }, 100);
 }
-
 function handleEstFile(file, env){
   if(!file) return;
   const st = document.getElementById(`est-up-st-${env}`);
@@ -10067,21 +10104,15 @@ function applyEstSnapPorFilial(env, perioKey, items, filiaisNovas, modo='substit
 
 // ── Persist ─────────────────────────────────────────────────
 function saveEstState(){
-  const data = JSON.stringify({
+  const data = {
     mb:{snapshots:EST_DATA.mb.snapshots, filialUpdates:EST_DATA.mb.filialUpdates||{}},
     mc:{snapshots:EST_DATA.mc.snapshots, filialUpdates:EST_DATA.mc.filialUpdates||{}}
+  };
+  // ✅ Sempre usar IDB para estoque (pode ser grande demais para localStorage)
+  _idbSetEst(data).catch(()=>{
+    // Fallback para localStorage se IDB falhar
+    try{ localStorage.setItem('dn_est_v2', JSON.stringify(data)); }catch(e){}
   });
-  try{
-    localStorage.setItem('dn_est_v2', data);
-  } catch(e){
-    // ✅ QuotaExceededError: fallback para IndexedDB quando localStorage está cheio
-    if(e.name === 'QuotaExceededError' || e.code === 22){
-      console.warn('⚠️ localStorage cheio — salvando estoque no IndexedDB');
-      _idbSave('dn_est_v2', data).catch(()=>{});
-      localStorage.removeItem('dn_est_v2'); // garantir que não há versão parcial
-    }
-  }
-  // Sheets sync em função async separada
   _syncEstoqueSheets();
 }
 
@@ -10117,22 +10148,32 @@ async function _syncEstoqueSheets(){
 }
 function loadEstState(){
   try{
-    let s=localStorage.getItem('dn_est_v2');
-    // ✅ Tentar IDB se localStorage vazio (fallback de quota)
-    if(!s){
-      _idbLoad('dn_est_v2').then(idbData=>{
-        if(idbData){ try{
-          const d=JSON.parse(idbData);
-          if(d.mb&&d.mb.snapshots) EST_DATA.mb=d.mb;
-          if(d.mc&&d.mc.snapshots) EST_DATA.mc=d.mc;
-          initEstFilters('mb'); renderEstoque('mb');
-        }catch{}}
-      }).catch(()=>{});
-      return;
-    }
-    const d=JSON.parse(s);
-    if(d.mb&&d.mb.snapshots) EST_DATA.mb=d.mb;
-    if(d.mc&&d.mc.snapshots) EST_DATA.mc=d.mc;
+    // ✅ Tentar IDB primeiro (estoque salvo lá para evitar quota)
+    _idbGetEst().then(d=>{
+      if(d){
+        if(d.mb&&d.mb.snapshots) EST_DATA.mb=d.mb;
+        if(d.mc&&d.mc.snapshots) EST_DATA.mc=d.mc;
+        initEstFilters('mb'); renderEstoque('mb');
+        initEstFilters('mc'); renderEstoque('mc');
+        return;
+      }
+      // Fallback localStorage
+      const s=localStorage.getItem('dn_est_v2');
+      if(!s) return;
+      const dl=JSON.parse(s);
+      if(dl.mb&&dl.mb.snapshots) EST_DATA.mb=dl.mb;
+      if(dl.mc&&dl.mc.snapshots) EST_DATA.mc=dl.mc;
+      initEstFilters('mb'); renderEstoque('mb');
+    }).catch(()=>{
+      try{
+        const s=localStorage.getItem('dn_est_v2');
+        if(!s) return;
+        const d=JSON.parse(s);
+        if(d.mb&&d.mb.snapshots) EST_DATA.mb=d.mb;
+        if(d.mc&&d.mc.snapshots) EST_DATA.mc=d.mc;
+      }catch{}
+    });
+    return; // loadEstState agora é assíncrono via IDB
     // Migrate old format (array)
     if(d.mb&&Array.isArray(d.mb)){
       EST_DATA.mb={snapshots:{'2025_01':d.mb}};
