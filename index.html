@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.41 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.44 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -3928,9 +3928,14 @@ function initFilialChips(env){
   const authFils = window._authFiliais;
   if(authFils && authFils.length){
     filsNoDado = filsNoDado.filter(f => authFils.includes(f));
-    // ✅ Popular F[env].filial com as filiais reais do núcleo
-    // Assim fTogFilial funciona corretamente ao desmarcar/marcar individualmente
-    F[env].filial = new Set(filsNoDado.length ? filsNoDado : ['all']);
+    // ✅ Só inicializar F[env].filial se ainda está em 'all' ou vazio
+    // Preservar seleção do usuário se já foi customizada
+    const filAtual = F[env].filial;
+    const estaEmAll = filAtual.size===0 || filAtual.has('all');
+    const temFilialInvalida = [...filAtual].some(f => f!=='all' && !filsNoDado.includes(f));
+    if(estaEmAll || temFilialInvalida){
+      F[env].filial = new Set(filsNoDado.length ? filsNoDado : ['all']);
+    }
   }
 
   const selAtual = new Set([...F[env].filial]);
@@ -9878,12 +9883,15 @@ function clearEstoque(env){
       if(SHEETS_CONFIG && SHEETS_CONFIG.enabled){
         try{
           if(limparTudo){
-            // Delete total da aba
             await limparDoSheets('estoque', env);
             mostrarToastSync(`✅ Estoque limpo — todas as filiais`, 'success');
           } else {
-            // Delete granular por filial + reenviar o restante
-            await limparDoSheets('estoque', env, { filial: filialSel });
+            // ✅ FIX: delete_all + reenvia apenas as filiais que sobraram no banco local
+            const itensSobrando = Object.values(EST_DATA[env].snapshots).flat();
+            await limparDoSheets('estoque', env);
+            if(itensSobrando.length > 0){
+              await enviarParaSheets('estoque', env, itensSobrando, 'append');
+            }
             mostrarToastSync(`✅ Estoque de ${filialSel} removido`, 'success');
           }
         } catch(err){ console.warn('⚠️ Erro ao limpar estoque do Sheets:', err); }
@@ -9988,6 +9996,9 @@ function handleEstFile(file, env){
       items.forEach(i=>{ i._updatedAt=updatedAt; });
       const modoEst = _estModo[env] || 'substituir';
       applyEstSnapPorFilial(env, perioKey, items, filiais, modoEst);
+      // ✅ Guardar filiais do arquivo atual para o sync do Sheets
+      window._estFiliaisImportadas = window._estFiliaisImportadas || {};
+      window._estFiliaisImportadas[env] = filiais;
       const totalVal=items.reduce((s,i)=>s+i.valor,0);
       st.textContent=`✅ ${items.length.toLocaleString('pt-BR')} itens carregados`;
       st.style.color='var(--grn)';
@@ -10085,16 +10096,20 @@ async function _syncEstoqueSheets(){
     const filiaisSync = [...new Set(allItems.map(i=>i.filial).filter(Boolean))];
     try{
       if(modoSync === 'substituir'){
-        const itemsSync = allItems.filter(i => filiaisSync.includes(i.filial));
-        for(const fil of filiaisSync){
+        // Substituir: delete granular por filial + reenvia só essas filiais
+        const filiaisImp = (window._estFiliaisImportadas||{})[env] || filiaisSync;
+        for(const fil of filiaisImp){
           await limparDoSheets('estoque', env, { filial: fil });
         }
-        await enviarParaSheets('estoque', env, itemsSync, 'append');
-        console.log(`✅ Estoque substituído: ${filiaisSync.join(', ')} (${itemsSync.length} itens)`);
+        const itemsImp = allItems.filter(i => filiaisImp.includes(i.filial));
+        await enviarParaSheets('estoque', env, itemsImp, 'append');
+        console.log(`✅ Estoque substituído: ${filiaisImp.join(', ')} (${itemsImp.length} itens)`);
       } else {
-        const itemsNovos = allItems.filter(i => filiaisSync.includes(i.filial));
+        // ✅ Acumular: append APENAS das filiais do arquivo atual — não reenvia as que já estão no Sheets
+        const filiaisImp = (window._estFiliaisImportadas||{})[env] || filiaisSync;
+        const itemsNovos = allItems.filter(i => filiaisImp.includes(i.filial));
         await enviarParaSheets('estoque', env, itemsNovos, 'append');
-        console.log(`✅ Estoque acumulado: ${filiaisSync.join(', ')} (${itemsNovos.length} itens)`);
+        console.log(`✅ Estoque acumulado: ${filiaisImp.join(', ')} (${itemsNovos.length} itens)`);
       }
       mostrarToastSync(`✅ Estoque sincronizado com Sheets`, 'success');
     } catch(err){ console.warn('⚠️ Erro ao sincronizar estoque:', err); }
