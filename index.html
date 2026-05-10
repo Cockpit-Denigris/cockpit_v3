@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.38 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.39 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -11251,11 +11251,17 @@ var _estCruzData     = { mb: [], mc: [] };
 function renderEstCruzamento(env){
   // Cruzamento ignora filtro de CURVA do filterbar —
   // precisa ver C/D (excesso) E A/B (demanda) ao mesmo tempo
-  // Aplica apenas: filial, mobilidade, grupo e técnico
+  // ✅ Cruzamento usa TODAS as filiais com estoque — ignora restrição de núcleo
+  // Permite comparação entre filiais mesmo para usuários consult
   var _fc = EST_F[env];
-  var allItems = getEstAllItems(env).filter(function(i){
-    return (_fc.filiais.size===0||_fc.filiais.has(i.filial))&&
-           (_fc.tec.size===0||_fc.tec.has(i.tec))&&
+  var snaps = EST_DATA[env]?.snapshots || {};
+  var allItemsTotal = Object.values(snaps).flat();
+  // Normalizar tec igual ao getEstAllItems
+  allItemsTotal = allItemsTotal.map(function(i){
+    return (i.tec==='SIM'||i.tec==='NÃO') ? i : Object.assign({},i,{tec:_normTec(i.tec)});
+  });
+  var allItems = allItemsTotal.filter(function(i){
+    return (_fc.tec.size===0||_fc.tec.has(i.tec))&&
            (_fc.mobs.size===0||_fc.mobs.has(i.mobCls))&&
            (_fc.grupos.size===0||(!_fc.grupos.has('__NONE__')&&_fc.grupos.has(i.grupo||'Sem Grupo')));
   });
