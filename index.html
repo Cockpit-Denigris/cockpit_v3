@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.45 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.46 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -9884,32 +9884,36 @@ function clearEstoque(env){
   const allItems = Object.values(EST_DATA[env]?.snapshots||{}).flat();
   const filiais = [...new Set(allItems.map(i=>i.filial).filter(Boolean))].sort();
 
-  if(!filiais.length){ _admConfirm('Nenhum estoque carregado.','',()=>{}); return; }
+  if(!filiais.length){ alert('Nenhum estoque carregado.'); return; }
 
+  // ✅ Checkboxes com onclick para toggle visual
   const checks = filiais.map(f=>
-    `<label style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
-      <input type="checkbox" class="est-clear-chk" value="${f}" style="width:14px;height:14px">
+    `<div onclick="this.querySelector('input').click()" style="display:flex;align-items:center;gap:8px;margin:6px 0;cursor:pointer;padding:4px 8px;border-radius:4px;background:var(--card2)">
+      <input type="checkbox" class="est-clear-chk" value="${f}" onclick="event.stopPropagation()" style="width:15px;height:15px;cursor:pointer;accent-color:var(--mb)">
       <span style="font-size:13px">${f}</span>
-    </label>`
+    </div>`
   ).join('');
 
   _admConfirm(
     'Apagar dados de estoque?',
-    `<div style="margin-bottom:8px;font-size:12px;color:var(--txt3)">Selecione as filiais a remover (período completo):</div>
-     <label style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
-       <input type="checkbox" id="est-clear-all" style="width:14px;height:14px">
+    `<div style="margin-bottom:10px;font-size:12px;color:var(--txt3)">Selecione as filiais a remover (todo o período):</div>
+     <div onclick="var a=document.getElementById('est-clear-all');a.checked=!a.checked;document.querySelectorAll('.est-clear-chk').forEach(c=>c.checked=a.checked)" 
+          style="display:flex;align-items:center;gap:8px;margin:6px 0;cursor:pointer;padding:4px 8px;border-radius:4px;background:var(--card2);border:1px solid var(--mb)">
+       <input type="checkbox" id="est-clear-all" onclick="event.stopPropagation();document.querySelectorAll('.est-clear-chk').forEach(c=>c.checked=this.checked)" 
+              style="width:15px;height:15px;cursor:pointer;accent-color:var(--mb)">
        <span style="font-size:13px;font-weight:700">Todas as filiais</span>
-     </label>
-     <hr style="border-color:var(--brd);margin:6px 0">
+     </div>
+     <hr style="border-color:var(--brd);margin:8px 0">
      ${checks}
-     <small style="color:var(--txt3);margin-top:8px;display:block">Remove do navegador E do Sheets. Não pode ser desfeita.</small>`,
+     <small style="color:var(--txt3);margin-top:10px;display:block">⚠️ Remove permanentemente do navegador E do banco de dados.</small>`,
     async ()=>{
       const allChk = document.getElementById('est-clear-all');
       const chks = [...document.querySelectorAll('.est-clear-chk:checked')];
       const limparTudo = allChk && allChk.checked;
       const filiaisSel = limparTudo ? filiais : chks.map(c=>c.value);
-      if(!filiaisSel.length) return;
+      if(!filiaisSel.length){ alert('Selecione ao menos uma filial.'); return; }
 
+      // Remover do banco local
       if(limparTudo){
         EST_DATA[env].snapshots={};
       } else {
@@ -9922,22 +9926,26 @@ function clearEstoque(env){
       initEstFilters(env);
       renderEstoque(env);
 
+      // ✅ Delete granular por filial no Sheets — igual ao DMS
       if(SHEETS_CONFIG && SHEETS_CONFIG.enabled){
         try{
-          const itensSobrando = Object.values(EST_DATA[env].snapshots).flat();
-          await limparDoSheets('estoque', env);
-          if(itensSobrando.length > 0) await enviarParaSheets('estoque', env, itensSobrando, 'append');
+          if(limparTudo){
+            await limparDoSheets('estoque', env);
+            console.log('🗑️ Estoque limpo — todas as filiais');
+          } else {
+            for(const fil of filiaisSel){
+              await limparDoSheets('estoque', env, { filial: fil });
+              console.log(`🗑️ Estoque ${fil} removido do Sheets`);
+            }
+          }
           mostrarToastSync(`✅ Estoque removido: ${limparTudo?'todas as filiais':filiaisSel.join(', ')}`, 'success');
         } catch(err){ console.warn('⚠️ Erro ao limpar estoque:', err); }
       }
     }
   );
-  setTimeout(()=>{
-    const allChk = document.getElementById('est-clear-all');
-    if(allChk) allChk.onchange = ()=>
-      document.querySelectorAll('.est-clear-chk').forEach(c=>c.checked=allChk.checked);
-  }, 100);
 }
+
+
 function handleEstFile(file, env){
   if(!file) return;
   const st = document.getElementById(`est-up-st-${env}`);
