@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.40 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.41 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -4128,13 +4128,30 @@ function fTogNucleo(env, el, nomeNucleo){
 }
 // Ao clicar em filial individual: desativa Núcleos e usa seleção livre
 function fTogFilial(env,el,val){
-  // Limpar seleção de núcleo (não remove visual, só reseta)
-  // A filial individual tem prioridade
   const wrap=document.getElementById('fFil'+env.toUpperCase());
-  wrap.querySelector('.chip').classList.remove('on-mb','on-mc'); F[env].filial.delete('all');
-  el.classList.toggle('on-'+env);
-  el.classList.contains('on-'+env)?F[env].filial.add(val):F[env].filial.delete(val);
-  if(F[env].filial.size===0){fAllFilial(env,wrap.querySelector('.chip'));return;}
+  const allChip=wrap.querySelector('.chip');
+  allChip.classList.remove('on-mb','on-mc');
+  F[env].filial.delete('all');
+
+  const jaMarcada = el.classList.contains('on-'+env);
+  const quantasMarcadas = F[env].filial.size;
+
+  if(jaMarcada && quantasMarcadas > 1){
+    // ✅ Estava marcada com outras — selecionar SÓ ela, desmarcar as demais
+    wrap.querySelectorAll('.chip').forEach(c => c.classList.remove('on-mb','on-mc'));
+    el.classList.add('on-'+env);
+    F[env].filial = new Set([val]);
+  } else if(jaMarcada && quantasMarcadas === 1){
+    // Era a única marcada — voltar para 'all'
+    fAllFilial(env, allChip);
+    return;
+  } else {
+    // Não estava marcada — adicionar ao set
+    el.classList.add('on-'+env);
+    F[env].filial.add(val);
+  }
+
+  if(F[env].filial.size===0){ fAllFilial(env,allChip); return; }
   renderAll(env);
 }
 
