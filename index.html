@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.56 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.57 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -6846,13 +6846,16 @@ window.addEventListener('load',()=>{
         renderStatusStrip(env);
         setTimeout(()=>renderAll(env), 80);
       });
-      // Estoque
-      ['mb','mc'].forEach(env=>{
-        if(Object.keys(EST_DATA[env]?.snapshots||{}).length){
-          initEstFilters(env);
-          renderEstoque(env);
-        }
-      });
+      // Estoque — só renderiza do IDB se Sheets não estiver configurado
+      // Se Sheets ativo, aguarda o sync para evitar KPI com dados de cache sujo
+      if(!SHEETS_CONFIG || !SHEETS_CONFIG.enabled){
+        ['mb','mc'].forEach(env=>{
+          if(Object.keys(EST_DATA[env]?.snapshots||{}).length){
+            initEstFilters(env);
+            renderEstoque(env);
+          }
+        });
+      }
     }
   });
   // ══════════════════════════════════════════════════════════════
@@ -9517,9 +9520,10 @@ async function _sincronizarTudoDoSheets(){
     try {
       await sincronizarEstoqueComSheets('mb');
       console.log('📦 Estoque MB após sync:', Object.keys(EST_DATA.mb.snapshots||{}).length, 'snapshots');
-      if(Object.keys(EST_DATA.mb.snapshots||{}).length){ initEstFilters('mb'); renderEstoque('mb'); }
+      // Sempre re-renderiza após sync — mesmo se vazio, para limpar KPI com cache antigo
+      initEstFilters('mb'); renderEstoque('mb');
       await sincronizarEstoqueComSheets('mc');
-      if(Object.keys(EST_DATA.mc.snapshots||{}).length){ initEstFilters('mc'); renderEstoque('mc'); }
+      initEstFilters('mc'); renderEstoque('mc');
     } catch(eEst){ console.warn('⚠️ Erro ao sincronizar estoque:', eEst); }
 
     // ── Despesas MB e MC ───────────────────────────────────────
