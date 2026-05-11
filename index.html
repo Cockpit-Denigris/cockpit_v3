@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.51 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.52 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -1094,7 +1094,16 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
 
           <!-- Evolução Mensal e Distribuição por Curva removidos -->
 
-          <!-- Mobilidade por Linha de Produto (Mix) — primeiro -->
+          <!-- Curva ABCD — resumo com percentuais -->
+          <div class="cc mb12" id="est-curva-abcd-mb">
+            <div class="cc-hd">
+              <div><div class="cc-title">🎯 Curva ABC/D do Estoque</div><div class="cc-sub">Distribuição do valor em estoque por curva · % do total</div></div>
+              <span class="badge bg2" id="est-curva-abcd-badge-mb">—</span>
+            </div>
+            <div id="est-curva-abcd-wrap-mb"></div>
+          </div>
+
+          <!-- Mobilidade por Linha de Produto (Mix) -->
           <div class="cc mb12">
             <div class="cc-hd">
               <div><div class="cc-title">🚦 Mobilidade por Linha de Produto</div><div class="cc-sub">Valor por grupo × classificação de giro · % do mix total</div></div>
@@ -1103,7 +1112,7 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
             <div class="tbl-wrap" id="est-mob-mix-wrap-mb"></div>
           </div>
 
-          <!-- Mix por Grupo × Curva — abaixo da Mobilidade -->
+          <!-- Mix por Grupo × Curva -->
           <div class="cc mb12" style="display:none">
             <div class="cc-hd">
               <div><div class="cc-title">🗂 Mix por Grupo × Curva</div><div class="cc-sub">Valor em estoque · clique para ver detalhes</div></div>
@@ -1113,15 +1122,6 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
               </div>
             </div>
             <div class="tbl-wrap" id="est-pivot-wrap-mb"></div>
-          </div>
-
-          <!-- Curva ABCD — resumo com percentuais -->
-          <div class="cc mb12" id="est-curva-abcd-mb">
-            <div class="cc-hd">
-              <div><div class="cc-title">🎯 Curva ABC/D do Estoque</div><div class="cc-sub">Distribuição do valor em estoque por curva · % do total</div></div>
-              <span class="badge bg2" id="est-curva-abcd-badge-mb">—</span>
-            </div>
-            <div id="est-curva-abcd-wrap-mb"></div>
           </div>
 
           <!-- Evolução do Estoque DRE — último indicador -->
@@ -1606,9 +1606,9 @@ table.meta-tbl th{background:var(--card2);font-size:10px;color:var(--txt3);text-
       </div>
       <div id="est-pg-visao-mc">
         <div id="est-kpis-mc" class="g4 mb12"></div>
+        <div class="cc mb12" id="est-curva-abcd-mc"><div class="cc-hd"><div><div class="cc-title">🎯 Curva ABC/D do Estoque</div><div class="cc-sub">Distribuição do valor em estoque por curva · % do total</div></div><span class="badge bmc" id="est-curva-abcd-badge-mc">—</span></div><div id="est-curva-abcd-wrap-mc"></div></div>
         <div class="cc mb12"><div class="cc-hd"><div class="cc-title">🚦 Mobilidade por Linha de Produto</div><span class="badge bmc" id="est-mob-badge-mc">—</span></div><div id="est-mob-cards-mc"></div><div id="est-mob-mix-wrap-mc"></div></div>
         <div class="cc mb12" style="display:none"><div class="cc-hd"><div class="cc-title">🗂 Mix por Grupo × Curva</div><span class="badge bmc" id="est-mix-badge-mc">—</span></div><div id="est-pivot-mc"></div></div>
-        <div class="cc mb12" id="est-curva-abcd-mc"><div class="cc-hd"><div><div class="cc-title">🎯 Curva ABC/D do Estoque</div><div class="cc-sub">Distribuição do valor em estoque por curva · % do total</div></div><span class="badge bmc" id="est-curva-abcd-badge-mc">—</span></div><div id="est-curva-abcd-wrap-mc"></div></div>
         <div class="cc mb12"><div class="cc-hd"><div><div class="cc-title">📦 Evolução do Estoque</div></div><span class="badge bmc" id="est-dre-badge-mc">—</span></div><div class="chips" id="est-dre-anos-mc" style="margin-bottom:8px"></div><div class="chips" id="est-dre-fils-mc" style="margin-bottom:8px"></div><div id="est-dre-tbl-mc"></div></div>
         <div class="cc mb12"><div class="cc-hd"><div class="cc-title">⏱ Prazo Médio de Estoque</div></div><div id="est-prazo-mc"></div></div>
       </div>
@@ -9398,7 +9398,7 @@ async function _sincronizarTudoDoSheets(){
   loadScreen.style.cssText = `position:fixed;inset:0;z-index:99998;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px`;
   loadScreen.innerHTML = `
     <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px">De <span style="color:var(--mb)">Nigris</span></div>
-    <div id="gs-load-msg" style="font-size:13px;color:var(--txt2);min-width:280px;text-align:center">🔄 Conectando ao Google Sheets…</div>
+    <div id="gs-load-msg" style="font-size:13px;color:var(--txt2);min-width:280px;text-align:center">🔄 Conectando ao Banco de Dados…</div>
     <div style="width:280px;height:4px;background:var(--brd);border-radius:2px;overflow:hidden">
       <div id="gs-load-bar" style="height:4px;background:var(--mb);border-radius:2px;width:0%;transition:width .5s ease"></div>
     </div>
@@ -9414,7 +9414,7 @@ async function _sincronizarTudoDoSheets(){
 
   try {
     console.group('🔄 _sincronizarTudoDoSheets — início');
-    mostrarToastSync('🔄 Sincronizando dados do Google Sheets...', 'info');
+    mostrarToastSync('🔄 Sincronizando dados do Banco de Dados...', 'info');
     setLoad(5, '📡 Buscando Vendas MB…');
 
     // ── Vendas MB ──────────────────────────────────────────────
@@ -12241,7 +12241,7 @@ async function gsRefreshAll(){
   gsOpenModal(`
     <div style="background:var(--card);border:1px solid var(--brd);border-radius:14px;padding:32px 40px;text-align:center;min-width:340px">
       <div style="font-size:24px;margin-bottom:12px">🔄</div>
-      <div style="font-weight:700;color:var(--txt);margin-bottom:8px">Buscando dados do Google Sheets...</div>
+      <div style="font-weight:700;color:var(--txt);margin-bottom:8px">Buscando dados do Banco de Dados...</div>
       <div id="gs-progress-msg" style="font-size:12px;color:var(--txt3);min-height:20px"></div>
       <div style="margin-top:16px;background:var(--card2);border-radius:6px;height:6px;overflow:hidden">
         <div id="gs-progress-bar" style="height:6px;background:var(--mb);width:0%;transition:width 0.4s;border-radius:6px"></div>
