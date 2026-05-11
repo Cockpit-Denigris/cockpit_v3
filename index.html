@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.54 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.55 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -2232,9 +2232,8 @@ async function sincronizarEstoqueComSheets(ambiente) {
       
       return dadosSheets;
     } else {
-      // ✅ FIX: Sheets sem estoque para este ambiente — limpar só este ambiente
-      EST_DATA[ambiente] = { snapshots:{} };
-      console.log(`📦 Sem estoque no Sheets para ${ambiente}`);
+      // ✅ FIX55: Sheets sem dados — preservar o que já está em memória/IDB
+      console.log(`📦 Sheets vazio para estoque ${ambiente} — dados locais preservados`);
       return null;
     }
     
