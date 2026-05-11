@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.46 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.47 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -9850,8 +9850,9 @@ function renderEstLoadedPeriods(env){
 function deleteEstFilial(env, filial){
   _admConfirm(
     `Remover estoque de <strong>${filial}</strong>?`,
-    'Os dados desta filial serão removidos do estoque.',
-    ()=>{
+    'Os dados desta filial serão removidos do banco de dados e do Sheets.',
+    async ()=>{
+      // Remover do banco local
       const snap=EST_DATA[env].snapshots;
       Object.keys(snap).forEach(k=>{
         snap[k]=snap[k].filter(i=>i.filial!==filial);
@@ -9862,6 +9863,14 @@ function deleteEstFilial(env, filial){
       renderEstLoadedPeriods(env);
       initEstFilters(env);
       renderEstoque(env);
+      // ✅ Delete granular no Sheets — sem reenviar nada
+      if(SHEETS_CONFIG && SHEETS_CONFIG.enabled){
+        try{
+          await limparDoSheets('estoque', env, { filial });
+          console.log(`🗑️ Estoque ${filial} removido do Sheets`);
+          mostrarToastSync(`✅ Estoque de ${filial} removido`, 'success');
+        } catch(err){ console.warn('⚠️ Erro ao remover estoque do Sheets:', err); }
+      }
     }
   );
 }
@@ -9881,6 +9890,11 @@ function deleteEstPeriodo(env, key){
 }
 
 function clearEstoque(env){
+  // ✅ Redireciona para o modal de carregar estoque onde o X por filial está disponível
+  openEstUpload(env);
+}
+
+function _clearEstoqueInterno(env){
   const allItems = Object.values(EST_DATA[env]?.snapshots||{}).flat();
   const filiais = [...new Set(allItems.map(i=>i.filial).filter(Boolean))].sort();
 
