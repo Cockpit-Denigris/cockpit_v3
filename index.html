@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.53 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.54 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -9767,7 +9767,7 @@ function handleEstFile(file, env){
       hdr.forEach((h,i)=>{
         const u=h.toUpperCase();
         if(u==='FILIAL')                              ci.filial=i;
-        else if(u.includes('CUSTO TOTAL'))            ci.valor=i;
+        else if(u.includes('CUSTO TOTAL')||u==='VALOR') ci.valor=i;
         else if(u==='DIAS EM ESTOQUE')                ci.dias=i;
         else if(u==='MOBILIDADE')                     ci.mob=i;
         else if(u.includes('MANDATOR'))               ci.mand=i;
@@ -12069,7 +12069,7 @@ async function gsLoadEstoque(){
     hdr.forEach((h,i)=>{
       const u = h.toUpperCase();
       if(u==='FILIAL') ci.filial=h;
-      else if(u.includes('CUSTO TOTAL')) ci.valor=h;
+      else if(u.includes('CUSTO TOTAL')||u==='VALOR') ci.valor=h;
       else if(u==='DIAS EM ESTOQUE'||u==='DIAS') ci.dias=h;
       else if(u==='MOBILIDADE'||u==='MOB') ci.mob=h;
       else if(u.includes('MANDATOR')||u.includes('ESTOQUE TÉC')||u.includes('ESTOQUE TEC')||u.includes('OBRIGAT')) ci.tec=h;
