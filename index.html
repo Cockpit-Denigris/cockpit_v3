@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.59 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.60 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -12060,62 +12060,73 @@ async function gsLoadEstoque(){
   const perioKey = `${hoje.getFullYear()}_${String(hoje.getMonth()+1).padStart(2,'0')}`;
   let totalItens = 0;
 
-  // Usar handleEstFile internamente — simular upload para cada filial
+  // Parser de colunas (único, baseado no cabeçalho real)
+  const hdr = Object.keys(rows[0]);
+  const ci = {};
+  hdr.forEach(h=>{
+    const u = h.toUpperCase();
+    if(u==='FILIAL') ci.filial=h;
+    else if(u.includes('CUSTO TOTAL')||u==='VALOR') ci.valor=h;
+    else if(u==='DIAS EM ESTOQUE'||u==='DIAS') ci.dias=h;
+    else if(u==='MOBILIDADE'||u==='MOB') ci.mob=h;
+    else if(u.includes('MANDATOR')||u.includes('ESTOQUE TÉC')||u.includes('ESTOQUE TEC')||u.includes('OBRIGAT')) ci.tec=h;
+    else if(u.includes('DESCRIÇÃO')||u.includes('DESCRICAO')||u==='DESC') ci.desc=h;
+    else if(u==='FORNECEDOR') ci.forn=h;
+    else if(u==='ESTOQUE'||u==='QUANTIDADE'||u==='QTD') ci.qtd=h;
+    else if(u==='CURVA') ci.curva=h;
+    else if(u==='GRUPO') ci.grupo=h;
+    else if(u.includes('ÚLTIMA VENDA')||u.includes('ULTIMA VENDA')) ci.ultvenda=h;
+    else if(u==='CUSTO FORNECEDOR') ci.custoForn=h;
+    else if(u==='CUSTO CONTÁBIL'||u==='CUSTO CONTABIL') ci.custoContab=h;
+    else if(h==='Código') ci.codLimpo=h;
+    else if(h==='AjusteCódigo') ci.codigo=h;
+  });
+
+  // Mapear filial → ambiente (mb ou mc) usando EST_F
+  const filialParaEnv = (fil) => {
+    const f = fil.toLowerCase();
+    if(EST_F.mc && [...(EST_F.mc.filiais||[])].some(x=>x.toLowerCase()===f)) return 'mc';
+    return 'mb'; // default mb
+  };
+
+  // Separar itens por ambiente baseado na filial real
+  const itensPorEnv = { mb:[], mc:[] };
+  rows.forEach(row=>{
+    const filialRaw = ci.filial ? (row[ci.filial]||'') : '';
+    if(!filialRaw) return;
+    const filial = mapFilial(String(filialRaw).trim())||String(filialRaw).trim();
+    const valor = ci.valor ? parseFloat(String(row[ci.valor]||'').replace(',','.'))||0 : 0;
+    const dias = ci.dias ? parseFloat(row[ci.dias])||0 : 0;
+    const mob = ci.mob ? String(row[ci.mob]||'').trim() : '';
+    const curva = ci.curva ? String(row[ci.curva]||'').trim().toUpperCase() : '';
+    const grupo = ci.grupo ? String(row[ci.grupo]||'').trim().replace(/\s*\[\d+\]\s*$/,'').replace(/^Mbc\s*\/\s*/i,'').trim() : '';
+    const cod = ci.codigo ? String(row[ci.codigo]||'').trim() : '';
+    const codL = ci.codLimpo ? normCod(String(row[ci.codLimpo]||'')) : normCod(cod);
+    const desc = ci.desc ? String(row[ci.desc]||'').trim() : '';
+    const forn = ci.forn ? String(row[ci.forn]||'').trim() : '';
+    const qtd = ci.qtd ? parseFloat(row[ci.qtd])||0 : 0;
+    const tecRaw = ci.tec ? String(row[ci.tec]||'').trim().toUpperCase() : '';
+    const tec = ['SIM','S','1','TRUE','T','X'].includes(tecRaw)?'SIM':'NÃO';
+    const custUnit = qtd>0?valor/qtd:0;
+    const mobCls = mob.startsWith('1')?'rapido':mob.startsWith('2')?'lento':mob.startsWith('3')?'parado':'outro';
+    // Determinar ambiente pela filial mapeada
+    const env = filialParaEnv(filial);
+    itensPorEnv[env].push({filial,valor,dias,mob,mobCls,curva,grupo,cod,codL,desc,forn,qtd,tec,custUnit,_periodo:perioKey});
+  });
+
+  // Gravar em cada ambiente — substituição total (limpa antes)
   ['mb','mc'].forEach(env=>{
-    const allRows = rows;
-    if(!allRows.length) return;
-
-    // Usar o mesmo parser do handleEstFile mas com dados do GSheets
-    const hdr = Object.keys(allRows[0]);
-    const ci = {};
-    hdr.forEach((h,i)=>{
-      const u = h.toUpperCase();
-      if(u==='FILIAL') ci.filial=h;
-      else if(u.includes('CUSTO TOTAL')||u==='VALOR') ci.valor=h;
-      else if(u==='DIAS EM ESTOQUE'||u==='DIAS') ci.dias=h;
-      else if(u==='MOBILIDADE'||u==='MOB') ci.mob=h;
-      else if(u.includes('MANDATOR')||u.includes('ESTOQUE TÉC')||u.includes('ESTOQUE TEC')||u.includes('OBRIGAT')) ci.tec=h;
-      else if(u.includes('DESCRIÇÃO')||u.includes('DESCRICAO')||u==='DESC') ci.desc=h;
-      else if(u==='FORNECEDOR') ci.forn=h;
-      else if(u==='ESTOQUE'||u==='QUANTIDADE'||u==='QTD') ci.qtd=h;
-      else if(u==='CURVA') ci.curva=h;
-      else if(u==='GRUPO') ci.grupo=h;
-      else if(u.includes('ÚLTIMA VENDA')||u.includes('ULTIMA VENDA')) ci.ultvenda=h;
-      else if(u==='CUSTO FORNECEDOR') ci.custoForn=h;
-      else if(u==='CUSTO CONTÁBIL'||u==='CUSTO CONTABIL') ci.custoContab=h;
-      else if(h==='Código') ci.codLimpo=h;
-      else if(h==='AjusteCódigo') ci.codigo=h;
-    });
-
-    const items = [];
-    allRows.forEach(row=>{
-      const filialRaw = ci.filial ? (row[ci.filial]||'') : '';
-      if(!filialRaw) return;
-      const filial = mapFilial(String(filialRaw).trim())||String(filialRaw).trim();
-      const valor = ci.valor ? parseFloat(String(row[ci.valor]||'').replace(',','.'))||0 : 0;
-      const dias = ci.dias ? parseFloat(row[ci.dias])||0 : 0;
-      const mob = ci.mob ? String(row[ci.mob]||'').trim() : '';
-      const curva = ci.curva ? String(row[ci.curva]||'').trim().toUpperCase() : '';
-      const grupo = ci.grupo ? String(row[ci.grupo]||'').trim().replace(/\s*\[\d+\]\s*$/,'').replace(/^Mbc\s*\/\s*/i,'').trim() : '';
-      const cod = ci.codigo ? String(row[ci.codigo]||'').trim() : '';
-      const codL = ci.codLimpo ? normCod(String(row[ci.codLimpo]||'')) : normCod(cod);
-      const desc = ci.desc ? String(row[ci.desc]||'').trim() : '';
-      const forn = ci.forn ? String(row[ci.forn]||'').trim() : '';
-      const qtd = ci.qtd ? parseFloat(row[ci.qtd])||0 : 0;
-      const tecRaw = ci.tec ? String(row[ci.tec]||'').trim().toUpperCase() : '';
-      const tec = ['SIM','S','1','TRUE','T','X'].includes(tecRaw)?'SIM':'NÃO';
-      const custUnit = qtd>0?valor/qtd:0;
-      const mobCls = mob.startsWith('1')?'rapido':mob.startsWith('2')?'lento':mob.startsWith('3')?'parado':'outro';
-      items.push({filial,valor,dias,mob,mobCls,curva,grupo,cod,codL,desc,forn,qtd,tec,custUnit,_periodo:perioKey});
-    });
-
+    const items = itensPorEnv[env];
+    // Limpar snapshots deste ambiente antes de gravar
+    EST_DATA[env] = { snapshots:{}, filialUpdates:{} };
     if(items.length){
       EST_DATA[env].snapshots[perioKey] = items;
-      totalItens = items.length;
-      saveEstState();
-      initEstFilters(env);
-      renderEstoque(env);
+      totalItens += items.length;
+      console.log(`📦 gsLoadEstoque ${env}: ${items.length} itens, filiais: ${[...new Set(items.map(i=>i.filial))].join(', ')}`);
     }
+    saveEstState();
+    initEstFilters(env);
+    renderEstoque(env);
   });
   return totalItens;
 }
