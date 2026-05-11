@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.52 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.53 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -2439,12 +2439,17 @@ function _cidadeImportDone(count){
 
 // Helper: detecta filial pelo campo empresa ou fallback no CIDADE_BASE
 function _detectFilialCidade(empresa, cidadeNorm){
-  const emp = empresa.toUpperCase();
-  // 1) Pelo campo empresa
+  // Normaliza: maiúsculo + sem acento para comparação robusta
+  const _norm = s => s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  const emp = _norm(empresa);
+  // 1) Pelo campo empresa — ordem importa: mais específico primeiro
   if(emp.includes('ITAPEVA')) return 'Itapeva';
   if(emp.includes('ALUMIN'))  return 'Alumínio';
   if(emp.includes('SOROCABA')) return 'Sorocaba';
-  if(emp.includes('LIMAO') || emp.includes('LIMÃO') || emp.includes('MATRIZ')) return 'Limão';
+  if(emp.includes('LIMAO') || emp.includes('MATRIZ')) return 'Limão';
+  if(emp.includes('ROSEIRA')) return 'Roseira';
+  // SJC: aceita "SJC", "DN SJC", "SAO JOSE DOS CAMPOS", "SAO JOSE", "São José" (normalizado)
+  if(emp.includes('SJC') || emp.includes('SAO JOSE')) return 'DN SJC';
   if(emp.includes('ITU') && !emp.includes('ITAPEVA') && !emp.includes('ALUMIN')) return 'Itu';
   // 2) Fallback: checar no CIDADE_BASE se a cidade já tem filial definida
   const baseEntry = CIDADE_BASE.find(([c])=>c===cidadeNorm);
