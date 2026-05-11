@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.49 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.50 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -9689,7 +9689,7 @@ function deleteEstFilial(env, filial){
         if(!snap[k].length) delete snap[k];
       });
       if(EST_DATA[env].filialUpdates) delete EST_DATA[env].filialUpdates[filial];
-      saveEstState({ skipSync: true }); // ✅ não sincroniza — delete granular feito abaixo
+      saveEstState(); // só salva local — delete granular feito abaixo
       renderEstLoadedPeriods(env);
       initEstFilters(env);
       renderEstoque(env);
@@ -9882,6 +9882,8 @@ function applyEstSnapPorFilial(env, perioKey, items, filiaisNovas, modo='substit
   filiaisNovas.forEach(f => { EST_DATA[env].filialUpdates[f] = updatedAt; });
 
   saveEstState();
+  // ✅ Sync com Sheets explícito apenas após importar arquivo
+  _syncEstoqueSheets();
   initEstFilters(env);
   renderEstoque(env);
   document.getElementById(`est-up-preview-${env}`).innerHTML='';
@@ -9889,18 +9891,16 @@ function applyEstSnapPorFilial(env, perioKey, items, filiaisNovas, modo='substit
 }
 
 // ── Persist ─────────────────────────────────────────────────
-function saveEstState(opts={}){
+function saveEstState(){
   const data = {
     mb:{snapshots:EST_DATA.mb.snapshots, filialUpdates:EST_DATA.mb.filialUpdates||{}},
     mc:{snapshots:EST_DATA.mc.snapshots, filialUpdates:EST_DATA.mc.filialUpdates||{}}
   };
-  // ✅ Sempre usar IDB para estoque (pode ser grande demais para localStorage)
+  // ✅ Salvar no IDB — sem sync automático com Sheets
+  // Sheets é sincronizado explicitamente apenas após importar arquivo
   _idbSetEst(data).catch(()=>{
     try{ localStorage.setItem('dn_est_v2', JSON.stringify(data)); }catch(e){}
   });
-  // ✅ Não sincronizar com Sheets se chamado com skipSync=true
-  // (ex: deleteEstFilial já faz o delete granular diretamente)
-  if(!opts.skipSync) _syncEstoqueSheets();
 }
 
 async function _syncEstoqueSheets(){
