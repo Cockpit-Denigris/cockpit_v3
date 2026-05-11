@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.58 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.59 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -2196,7 +2196,10 @@ async function sincronizarComSheets(tipo, ambiente) {
 // ── Função: Sincronizar ESTOQUE com Sheets (estrutura especial) ─
 async function sincronizarEstoqueComSheets(ambiente) {
   if (!SHEETS_CONFIG.enabled) return;
-  
+
+  // Zerar EST_DATA em memória antes de carregar — garante que IDB antigo não contamina
+  EST_DATA[ambiente] = { snapshots: {}, filialUpdates: {} };
+
   try {
     const dadosSheets = await lerDoSheets('estoque', ambiente);
     
@@ -3683,7 +3686,9 @@ function goTab(env,tab,btn){
         }
       }
     }
-    if(strip && strip._hasData){
+    // Fix: barra DADOS não exibida na aba Estoque
+    stripEst.style.display = 'none';
+    if(false && strip && strip._hasData){
       stripEst.innerHTML = strip.innerHTML;
       stripEst.style.display = 'flex';
     } else {
