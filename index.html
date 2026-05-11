@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.62 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.63 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -9836,10 +9836,10 @@ function handleEstFile(file, env){
       const updatedAt = new Date().toISOString();
       items.forEach(i=>{ i._updatedAt=updatedAt; });
       const modoEst = _estModo[env] || 'substituir';
-      applyEstSnapPorFilial(env, perioKey, items, filiais, modoEst);
-      // ✅ Guardar filiais do arquivo atual para o sync do Sheets
+      // ✅ Setar filiais ANTES de applyEstSnapPorFilial para que _syncEstoqueSheets use correto
       window._estFiliaisImportadas = window._estFiliaisImportadas || {};
       window._estFiliaisImportadas[env] = filiais;
+      applyEstSnapPorFilial(env, perioKey, items, filiais, modoEst);
       const totalVal=items.reduce((s,i)=>s+i.valor,0);
       st.textContent=`✅ ${items.length.toLocaleString('pt-BR')} itens carregados`;
       st.style.color='var(--grn)';
