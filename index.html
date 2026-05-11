@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.60 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.62 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -2229,8 +2229,10 @@ async function sincronizarEstoqueComSheets(ambiente) {
       console.log(`📦 Estoque ${ambiente} sync: ${filiaisDoSheets.size} filiais do Sheets, ${dadosSheets.length} itens — IDB substituído`);
       return dadosSheets;
     } else {
-      // ✅ FIX55: Sheets sem dados — preservar o que já está em memória/IDB
-      console.log(`📦 Sheets vazio para estoque ${ambiente} — dados locais preservados`);
+      // Sheets vazio — zerar EST_DATA (Sheets é fonte de verdade)
+      EST_DATA[ambiente] = { snapshots:{}, filialUpdates:{} };
+      saveEstState();
+      console.log(`📦 Sheets vazio para estoque ${ambiente} — zerando`);
       return null;
     }
     
@@ -9923,27 +9925,30 @@ async function _syncEstoqueSheets(){
   if(window._modoImportacaoAtivo){ console.log('📦 Modo Importação — estoque adiado'); return; }
   if(!SHEETS_CONFIG || !SHEETS_CONFIG.enabled) return;
   for(const env of ['mb','mc']){
+    // ✅ Fix62: usar APENAS as filiais do arquivo importado — nunca todas do EST_DATA
+    const filiaisImp = (window._estFiliaisImportadas||{})[env];
+    if(!filiaisImp || !filiaisImp.length){
+      console.log(`📦 Sem filiais importadas para ${env} — sync ignorado`);
+      continue;
+    }
     const snapshots = EST_DATA[env]?.snapshots || {};
     const allItems = Object.values(snapshots).flat();
     if(!allItems.length) continue;
     const modoSync = _estModo[env] || 'substituir';
-    const filiaisSync = [...new Set(allItems.map(i=>i.filial).filter(Boolean))];
+    const itemsImp = allItems.filter(i => filiaisImp.includes(i.filial));
+    if(!itemsImp.length) continue;
     try{
       if(modoSync === 'substituir'){
-        // Substituir: delete granular por filial + reenvia só essas filiais
-        const filiaisImp = (window._estFiliaisImportadas||{})[env] || filiaisSync;
+        // Limpar apenas as filiais do arquivo no Sheets, depois reenviar só elas
         for(const fil of filiaisImp){
           await limparDoSheets('estoque', env, { filial: fil });
         }
-        const itemsImp = allItems.filter(i => filiaisImp.includes(i.filial));
         await enviarParaSheets('estoque', env, itemsImp, 'append');
         console.log(`✅ Estoque substituído: ${filiaisImp.join(', ')} (${itemsImp.length} itens)`);
       } else {
-        // ✅ Acumular: append APENAS das filiais do arquivo atual — não reenvia as que já estão no Sheets
-        const filiaisImp = (window._estFiliaisImportadas||{})[env] || filiaisSync;
-        const itemsNovos = allItems.filter(i => filiaisImp.includes(i.filial));
-        await enviarParaSheets('estoque', env, itemsNovos, 'append');
-        console.log(`✅ Estoque acumulado: ${filiaisImp.join(', ')} (${itemsNovos.length} itens)`);
+        // Acumular: append apenas das filiais do arquivo
+        await enviarParaSheets('estoque', env, itemsImp, 'append');
+        console.log(`✅ Estoque acumulado: ${filiaisImp.join(', ')} (${itemsImp.length} itens)`);
       }
       mostrarToastSync(`✅ Estoque sincronizado com Sheets`, 'success');
     } catch(err){ console.warn('⚠️ Erro ao sincronizar estoque:', err); }
