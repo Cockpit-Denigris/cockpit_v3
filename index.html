@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.50 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.51 | Gerado em: 06/05/2026 | Fix1-24: anteriores | Fix25: estoque sync log | Fix26: sincronizarEstoque MC não apaga MB -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -9670,10 +9670,19 @@ function renderEstLoadedPeriods(env){
           <span style="color:var(--txt3);margin-left:auto;font-size:10px">
             ${filialMap[f].updatedAt ? '🕐 '+fmtDate(filialMap[f].updatedAt) : ''}
           </span>
-          <button onclick="deleteEstFilial('${env}','${f}')" title="Remover estoque de ${f}"
-            style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:0 2px;line-height:1">✕</button>
+          <button data-env="${env}" data-filial="${f}" title="Remover estoque de ${f}"
+            style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0 4px;line-height:1">✕</button>
         </div>`).join('')}
     </div>`;
+
+  // ✅ Usar addEventListener em vez de onclick inline — evita problemas com aspas/escaping
+  wrap.querySelectorAll('button[data-filial]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const e = btn.getAttribute('data-env');
+      const f = btn.getAttribute('data-filial');
+      deleteEstFilial(e, f);
+    });
+  });
 }
 
 // ── Deletar estoque de uma filial específica ─────────────────────
