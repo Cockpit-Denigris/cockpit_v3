@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.57 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.58 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -2201,38 +2201,16 @@ async function sincronizarEstoqueComSheets(ambiente) {
     const dadosSheets = await lerDoSheets('estoque', ambiente);
     
     if (dadosSheets && dadosSheets.length > 0) {
-      // Converter array plano para estrutura de snapshots
-      // Agrupar por período (_periodo) ou usar 'current' como padrão
+      // Sheets é fonte de verdade — descartar IDB completamente e usar só o Sheets
       const snapshots = {};
-
       dadosSheets.forEach(item => {
         const periodo = item._periodo || 'current';
         if (!snapshots[periodo]) snapshots[periodo] = [];
         snapshots[periodo].push(item);
       });
 
-      // Filiais que vieram do Sheets neste sync — fonte de verdade
-      const filiaisDoSheets = new Set(dadosSheets.map(i => (i.filial||'').toLowerCase()).filter(Boolean));
-
-      // Mesclar com snapshots já existentes, removendo apenas filiais presentes no Sheets
-      // (filiais que não vieram do Sheets — ex: Afabio — são mantidas se existirem localmente)
-      // MAS: se o Sheets tem dados, ele é fonte de verdade para as filiais que retornou
-      const snapsExistentes = EST_DATA[ambiente]?.snapshots || {};
-      const snapsFinais = {};
-      // 1) Partir dos snapshots existentes, removendo itens das filiais que o Sheets retornou
-      Object.entries(snapsExistentes).forEach(([periodo, items]) => {
-        const filtrados = items.filter(i => !filiaisDoSheets.has((i.filial||'').toLowerCase()));
-        if(filtrados.length) snapsFinais[periodo] = filtrados;
-      });
-      // 2) Adicionar os dados novos do Sheets
-      Object.entries(snapshots).forEach(([periodo, items]) => {
-        if(!snapsFinais[periodo]) snapsFinais[periodo] = [];
-        snapsFinais[periodo].push(...items);
-      });
-
-      // Reconstruir filialUpdates
       const filialUpdates = {};
-      Object.values(snapsFinais).flat().forEach(i=>{
+      dadosSheets.forEach(i => {
         if(i.filial && i._updatedAt){
           if(!filialUpdates[i.filial] || i._updatedAt > filialUpdates[i.filial]){
             filialUpdates[i.filial] = i._updatedAt;
@@ -2240,12 +2218,12 @@ async function sincronizarEstoqueComSheets(ambiente) {
         }
       });
 
-      EST_DATA[ambiente] = { snapshots: snapsFinais, filialUpdates };
-
-      // ✅ Salvar via IDB (evita QuotaExceededError no localStorage)
+      // Substituição total — sem merge com IDB
+      EST_DATA[ambiente] = { snapshots, filialUpdates };
       saveEstState();
 
-      console.log(`📦 Estoque ${ambiente} sync: ${filiaisDoSheets.size} filiais do Sheets, total snapshots: ${Object.values(snapsFinais).reduce((s,a)=>s+a.length,0)} itens`);
+      const filiaisDoSheets = new Set(dadosSheets.map(i => (i.filial||'').toLowerCase()).filter(Boolean));
+      console.log(`📦 Estoque ${ambiente} sync: ${filiaisDoSheets.size} filiais do Sheets, ${dadosSheets.length} itens — IDB substituído`);
       return dadosSheets;
     } else {
       // ✅ FIX55: Sheets sem dados — preservar o que já está em memória/IDB
