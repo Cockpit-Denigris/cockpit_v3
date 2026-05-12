@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.66 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.67 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -2035,12 +2035,20 @@ async function enviarParaSheets(tipo, ambiente, dados, acao = 'append', periodo 
     return { sucesso: false, motivo: 'disabled' };
   }
 
-  // ── PROTEÇÃO: bloquear replace se volume novo < 50% existente ──
-  if(acao === 'replace' && tipo === 'vendas'){
-    const volumeAtual = (DB.mb||[]).length + (DB.mc||[]).length;
-    if(volumeAtual > 0 && dados.length < volumeAtual * 0.5){
-      console.warn(`🛑 BLOQUEADO: ${dados.length} < 50% de ${volumeAtual}`);
-      mostrarToastSync && mostrarToastSync(`🛑 Envio bloqueado: volume insuficiente (${dados.length} vs ${volumeAtual})`, 'warning');
+  // ── PROTEÇÃO: bloquear replace se volume novo < 50% do volume das mesmas filiais/período ──
+  if(acao === 'replace' && tipo === 'vendas' && filtros){
+    const filiais = new Set((filtros.filiais||[]).map(f=>f.toLowerCase()));
+    const anos    = new Set((filtros.anos||[]).map(Number));
+    const meses   = new Set((filtros.meses||[]).map(Number));
+    const dbEnv   = ambiente === 'mb' ? (DB.mb||[]) : (DB.mc||[]);
+    const volumeFilial = dbEnv.filter(r =>
+      filiais.has((r.Filial||'').toLowerCase()) &&
+      anos.has(Number(r.Ano)) &&
+      meses.has(Number(r.Mês_Num))
+    ).length;
+    if(volumeFilial > 0 && dados.length < volumeFilial * 0.3){
+      console.warn(`🛑 BLOQUEADO: ${dados.length} < 30% de ${volumeFilial} (filiais: ${[...filiais].join(',')})`);
+      mostrarToastSync && mostrarToastSync(`🛑 Envio bloqueado: volume muito baixo (${dados.length} vs ${volumeFilial} existentes)`, 'warning');
       return { sucesso: false, motivo: 'volume_insuficiente' };
     }
   }
