@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.68 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.69 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -6654,16 +6654,20 @@ function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
     (async ()=>{
       try{
         if(modo === 'substituir'){
-          // ✅ Fix66: replace em uma chamada só — AppScript deleta+insere atomicamente
-          const filsAfetadas = [...new Set(parsed.map(r=>r.Filial))];
+          // ✅ Fix69: delete separado + aguarda + append — contorna limite 30s do AppScript
+          const filsAfetadas  = [...new Set(parsed.map(r=>r.Filial))];
           const anosAfetados  = [...new Set(parsed.map(r=>r.Ano))];
           const mesesAfetados = [...new Set(parsed.map(r=>r.Mês_Num))];
-          await _sheetsAppend('vendas', env, parsedParaSheets, 'replace', {
-            filiais: filsAfetadas,
-            anos: anosAfetados,
-            meses: mesesAfetados,
-            fonte
-          });
+          const filtros = { filiais: filsAfetadas, anos: anosAfetados, meses: mesesAfetados, fonte };
+          // Etapa 1: dispara delete (no-cors — AppScript processa em background sem timeout)
+          console.log(`🗑️ Disparando delete: ${JSON.stringify(filtros)}`);
+          await limparDoSheets('vendas', env, filtros);
+          // Etapa 2: aguarda AppScript terminar o delete (estimativa baseada no volume)
+          const espera = Math.min(15000, Math.max(5000, Math.floor((DB[env]||[]).length / 218000 * 15000)));
+          console.log(`⏳ Aguardando ${espera/1000}s para o delete processar...`);
+          await new Promise(r => setTimeout(r, espera));
+          // Etapa 3: append dos dados novos
+          await _sheetsAppend('vendas', env, parsedParaSheets, 'append');
         } else {
           // Acumular: append normal
           await _sheetsAppend('vendas', env, parsedParaSheets, 'append');
