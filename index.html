@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.65 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.66 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -2030,7 +2030,7 @@ window.currentFileName = null;
 // ── Função: Enviar dados para Google Sheets (em lotes) ─────────
 const SHEETS_CHUNK_SIZE = 500; // registros por lote
 
-async function enviarParaSheets(tipo, ambiente, dados, acao = 'append', periodo = null) {
+async function enviarParaSheets(tipo, ambiente, dados, acao = 'append', periodo = null, filtros = null) {
   if (!SHEETS_CONFIG.enabled) {
     return { sucesso: false, motivo: 'disabled' };
   }
@@ -2076,6 +2076,7 @@ async function enviarParaSheets(tipo, ambiente, dados, acao = 'append', periodo 
         ambiente: ambiente,
         acao: acaoLote,
         periodo: periodo,
+        filtros: (i === 0 && filtros) ? filtros : null, // filtros só no primeiro lote
         dados: chunk,
         arquivo: window.currentFileName || 'Sem nome',
         usuario: window.currentUser?.nome || 'Sistema'
@@ -3071,13 +3072,12 @@ async function _enviarTudoAoSheets(){
 
 
 // ── Helper: enviar ao Sheets respeitando Modo Importação ────────
-function _sheetsAppend(tipo, env, dados, acao='append'){
+function _sheetsAppend(tipo, env, dados, acao='append', filtros=null){
   if(window._modoImportacaoAtivo){
-    // Dados já acumulados de forma síncrona em aplicarParsed
     console.log(`📦 Modo Importação ativo — envio ${tipo}/${env} adiado`);
     return Promise.resolve();
   }
-  return enviarParaSheets(tipo, env, dados, acao).catch(e=>console.warn('⚠️ Sheets:', e));
+  return enviarParaSheets(tipo, env, dados, acao, null, filtros).catch(e=>console.warn('⚠️ Sheets:', e));
 }
 // ────────────────────────────────────────────────────────────────
 
@@ -3096,6 +3096,12 @@ async function saveState(){
   const bytes=new Blob([payload]).size;
   const d=new Date();
   const hm=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+
+  // Se Sheets está ativo, não salvar no IDB — Sheets é a fonte de verdade
+  if(SHEETS_CONFIG && SHEETS_CONFIG.enabled){
+    _setSaveIndicator('☁️ Sheets ativo', null, true);
+    return;
+  }
   
   // ═══ GOOGLE SHEETS SYNC ═══════════════════════════════════════
   // saveState é APENAS local — os parsers individuais enviam ao Sheets via _sheetsAppend
@@ -6639,23 +6645,18 @@ function aplicarParsed(parsed, filaisNovas, tipo, env, modo){
     (async ()=>{
       try{
         if(modo === 'substituir'){
-          // 🚀 RÁPIDO: deletar apenas as linhas do período/filial substituído
-          // Coletar filiais e períodos afetados
+          // ✅ Fix66: replace em uma chamada só — AppScript deleta+insere atomicamente
           const filsAfetadas = [...new Set(parsed.map(r=>r.Filial))];
           const anosAfetados  = [...new Set(parsed.map(r=>r.Ano))];
           const mesesAfetados = [...new Set(parsed.map(r=>r.Mês_Num))];
-          // Se afeta múltiplas filiais/períodos, usar loop; senão delete único
-          for(const fil of filsAfetadas){
-            for(const ano of anosAfetados){
-              for(const mes of mesesAfetados){
-                await limparDoSheets('vendas', env, {filial:fil, ano, mes, fonte});
-              }
-            }
-          }
-          // Enviar registros originais ao Sheets (antes da dedup local)
-          await _sheetsAppend('vendas', env, parsedParaSheets, 'append');
+          await _sheetsAppend('vendas', env, parsedParaSheets, 'replace', {
+            filiais: filsAfetadas,
+            anos: anosAfetados,
+            meses: mesesAfetados,
+            fonte
+          });
         } else {
-          // Acumular: enviar originais ao Sheets
+          // Acumular: append normal
           await _sheetsAppend('vendas', env, parsedParaSheets, 'append');
         }
         mostrarToastSync(`✅ Dados salvos no Sheets (${modoLabel})`, 'success');
@@ -9919,12 +9920,12 @@ function applyEstSnapPorFilial(env, perioKey, items, filiaisNovas, modo='substit
 
 // ── Persist ─────────────────────────────────────────────────
 function saveEstState(){
+  // Se Sheets está ativo, não salvar no IDB — Sheets é a fonte de verdade
+  if(SHEETS_CONFIG && SHEETS_CONFIG.enabled) return;
   const data = {
     mb:{snapshots:EST_DATA.mb.snapshots, filialUpdates:EST_DATA.mb.filialUpdates||{}},
     mc:{snapshots:EST_DATA.mc.snapshots, filialUpdates:EST_DATA.mc.filialUpdates||{}}
   };
-  // ✅ Salvar no IDB — sem sync automático com Sheets
-  // Sheets é sincronizado explicitamente apenas após importar arquivo
   _idbSetEst(data).catch(()=>{
     try{ localStorage.setItem('dn_est_v2', JSON.stringify(data)); }catch(e){}
   });
