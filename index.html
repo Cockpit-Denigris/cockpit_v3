@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.63 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.65 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -9394,6 +9394,9 @@ async function forcarEnvioSheets(){
 }
 
 async function _sincronizarTudoDoSheets(){
+  // Guard: evitar execução dupla simultânea
+  if(window._sincronizandoSheets){ console.log('🔄 Sync já em andamento — ignorado'); return; }
+  window._sincronizandoSheets = true;
   // Limpar TUDO antes de popular do Sheets — Sheets é a fonte de verdade
   DB.mb = []; DB.mc = [];
   DESP_DATA.mb = {}; DESP_DATA.mc = {};
@@ -9581,6 +9584,7 @@ async function _sincronizarTudoDoSheets(){
 
     setLoad(100, '✅ Carregamento concluído!');
     console.log('✅ Sincronização concluída!');
+    window._sincronizandoSheets = false;
     console.groupEnd();
     // Remover loading screen com pequeno delay
     setTimeout(()=>{ const s=document.getElementById('gs-loading-screen'); if(s) s.remove(); }, 800);
@@ -9588,6 +9592,7 @@ async function _sincronizarTudoDoSheets(){
 
   } catch(err){
     console.error('❌ Erro ao sincronizar do Sheets:', err);
+    window._sincronizandoSheets = false;
     console.groupEnd();
     setTimeout(()=>{ const s=document.getElementById('gs-loading-screen'); if(s) s.remove(); }, 1000);
     mostrarToastSync('⚠️ Não foi possível sincronizar com Sheets', 'warning');
@@ -9836,9 +9841,13 @@ function handleEstFile(file, env){
       const updatedAt = new Date().toISOString();
       items.forEach(i=>{ i._updatedAt=updatedAt; });
       const modoEst = _estModo[env] || 'substituir';
-      // ✅ Setar filiais ANTES de applyEstSnapPorFilial para que _syncEstoqueSheets use correto
+      // ✅ Setar filiais E período ANTES de applyEstSnapPorFilial
       window._estFiliaisImportadas = window._estFiliaisImportadas || {};
       window._estFiliaisImportadas[env] = filiais;
+      // Derivar ano/mes das datas dos itens (campo _updatedAt ou timestamp do arquivo)
+      window._estPeriodoImportado = window._estPeriodoImportado || {};
+      const _primeiraData = items[0]?._updatedAt ? new Date(items[0]._updatedAt) : new Date();
+      window._estPeriodoImportado[env] = { ano: _primeiraData.getFullYear(), mes: _primeiraData.getMonth()+1 };
       applyEstSnapPorFilial(env, perioKey, items, filiais, modoEst);
       const totalVal=items.reduce((s,i)=>s+i.valor,0);
       st.textContent=`✅ ${items.length.toLocaleString('pt-BR')} itens carregados`;
@@ -9939,9 +9948,15 @@ async function _syncEstoqueSheets(){
     if(!itemsImp.length) continue;
     try{
       if(modoSync === 'substituir'){
-        // Limpar apenas as filiais do arquivo no Sheets, depois reenviar só elas
+        // Limpar cirurgicamente: filial + período (ano+mes) — não apaga outros meses
+        const periodoImp = (window._estPeriodoImportado||{})[env]; // { ano, mes }
+        const anoImp = periodoImp?.ano || null;
+        const mesImp = periodoImp?.mes || null;
         for(const fil of filiaisImp){
-          await limparDoSheets('estoque', env, { filial: fil });
+          const filtro = anoImp && mesImp
+            ? { filial: fil, ano: anoImp, mes: mesImp }
+            : { filial: fil };
+          await limparDoSheets('estoque', env, filtro);
         }
         await enviarParaSheets('estoque', env, itemsImp, 'append');
         console.log(`✅ Estoque substituído: ${filiaisImp.join(', ')} (${itemsImp.length} itens)`);
