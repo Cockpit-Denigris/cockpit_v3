@@ -1,4 +1,4 @@
-<!-- De Nigris Cockpit v3 | Versao: V3.1.0.67 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
+<!-- De Nigris Cockpit v3 | Versao: V3.1.0.68 | Gerado em: 11/05/2026 | Fix1-51: anteriores | Fix52: "Google Sheets" → "Banco de Dados" na tela de loading | Fix52b: Curva ABC/D sobe acima de Mobilidade no Estoque (MB e MC) | Fix53: _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira | Fix54: coluna "valor" aceita como alias de CUSTO TOTAL no Estoque MB/MC _detectFilialCidade reconhece SJC/DN SJC/São José e Roseira com normalização de acento e case -->
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="dark">
 <head>
@@ -2099,10 +2099,11 @@ async function enviarParaSheets(tipo, ambiente, dados, acao = 'append', periodo 
         return { sucesso: false, motivo: 'cancelado' };
       }
 
-      // Fetch com timeout de 30s — sem retry (evita duplicatas no Sheets)
+      // Fetch com timeout variável: replace até 120s, append 30s
       // Com no-cors não sabemos se o servidor processou — retry causaria duplicatas
+      const _timeoutMs = (acao === 'replace' || acaoLote === 'replace') ? 120000 : 30000;
       const _ctrl = new AbortController();
-      const _timeout = setTimeout(() => _ctrl.abort(), 30000);
+      const _timeout = setTimeout(() => _ctrl.abort(), _timeoutMs);
       try {
         await fetch(SHEETS_CONFIG.apiUrl, {
           method: 'POST',
@@ -2112,7 +2113,7 @@ async function enviarParaSheets(tipo, ambiente, dados, acao = 'append', periodo 
           signal: _ctrl.signal
         });
       } catch(fetchErr) {
-        const motivo = fetchErr.name === 'AbortError' ? 'timeout (30s)' : 'erro de rede';
+        const motivo = fetchErr.name === 'AbortError' ? `timeout (${_timeoutMs/1000}s)` : 'erro de rede';
         console.warn(`⚠️ Lote ${i+1} ${motivo} — continuando sem retry (evita duplicatas)`);
       } finally {
         clearTimeout(_timeout);
